@@ -4,16 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
+    "dev": "npx tsx .remy && vite --host 0.0.0.0",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "package": "npm run build && rm -rf package.zip && rsync -av --include='dist/' --exclude-from='.gitignore' ./ ./dist-temp && cd dist-temp && zip -r ../package.zip . && cd .. && rm -rf dist-temp"
   },
   "dependencies": {
+    "@types/node": "^24.3.0",
+    "@types/ws": "^8.18.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "styled-components": "^6.1.17"
+    "styled-components": "^6.1.17",
+    "tsx": "^4.20.4",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",

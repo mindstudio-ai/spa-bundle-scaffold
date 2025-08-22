@@ -49,6 +49,10 @@ const syncPackages = async (code: string): Promise<void> => {
   }
 }
 
+const scheduleViteReload = async () => {
+  await fetch(`127.0.0.1:5173/__reload?path=${encodeURIComponent('src/App.tsx')}`);
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 // Patch code
 ////////////////////////////////////////////////////////////////////////////////
@@ -59,6 +63,8 @@ const handlePatch = async (code: string) => {
   await fs.writeFile(appFile, code, 'utf8');
 
   await syncPackages(code);
+
+  scheduleViteReload();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,4 +1,4 @@
-import styled from "styled-components";
+import styled from 'styled-components';
 
 const Page = styled.main`
   position: relative;
@@ -6,8 +6,8 @@ const Page = styled.main`
   place-items: center;
   min-height: 100svh;
   padding: 24px;
-  background: #1e90ff; /* lighter blueprint-like blue (Xcode feel) */
-  color: #f0f8ff;
+  background: #0a0a0a;
+  color: #f6f7fb;
   overflow: hidden;
 `;
 
@@ -17,7 +17,7 @@ const Title = styled.h1`
   line-height: 1.02;
   letter-spacing: -0.02em;
   text-align: center;
-  background: linear-gradient(90deg, #ffffff 0%, #dbeafe 100%);
+  background: linear-gradient(90deg, #ffffff 0%, #d4d4d4 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;

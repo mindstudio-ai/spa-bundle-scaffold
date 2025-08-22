@@ -10,6 +10,8 @@ rm -f package.zip
 # Copy files into a temporary folder, respecting .gitignore but keeping dist/
 rsync -av \
   --include='dist/' \
+  --exclude='.git/' \
+  --exclude='.remy/' \
   --exclude-from='.gitignore' \
   ./ ./dist-temp
 

@@ -11,7 +11,8 @@ type IncomingMsg =
   | Record<string, unknown>;
 
 const PORT = 4387;
-const APP_FILE = path.resolve(process.cwd(), 'src', 'App.tsx');
+const HOST = '0.0.0.0';
+const WS_PATH = '/remy';
 
 ////////////////////////////////////////////////////////////////////////////////
 // Simple package sycn
@@ -52,8 +53,9 @@ const syncPackages = async (code: string): Promise<void> => {
 ////////////////////////////////////////////////////////////////////////////////
 const handlePatch = async (code: string) => {
   // Write the code updates
-  await fs.mkdir(path.dirname(APP_FILE), { recursive: true });
-  await fs.writeFile(APP_FILE, code, 'utf8');
+  const appFile = path.resolve(process.cwd(), 'src', 'App.tsx');
+  await fs.mkdir(path.dirname(appFile), { recursive: true });
+  await fs.writeFile(appFile, code, 'utf8');
 
   await syncPackages(code);
 }
@@ -61,8 +63,18 @@ const handlePatch = async (code: string) => {
 ////////////////////////////////////////////////////////////////////////////////
 // Server
 ////////////////////////////////////////////////////////////////////////////////
-const httpServer = createServer();
-const wss = new WebSocketServer({ server: httpServer });
+const httpServer = createServer((req, res) => {
+  // Optional: small health check so hitting the URL in a browser shows something.
+  if (req.url === '/health') {
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.end('ok');
+  } else {
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.end('WebSocket server is running. Connect via ' + WS_PATH);
+  }
+});
+
+const wss = new WebSocketServer({ server: httpServer, path: WS_PATH });
 
 wss.on('connection', (ws) => {
   console.log('[ws-server] Client connected.');
@@ -87,5 +99,5 @@ wss.on('connection', (ws) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`[ws-server] Listening on ws://localhost:${PORT}`);
+  console.log(`[ws-server] Listening on ws://localhost:${PORT}${WS_PATH}`);
 });

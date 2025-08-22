@@ -101,3 +101,70 @@ wss.on('connection', (ws) => {
 httpServer.listen(PORT, () => {
   console.log(`[ws-server] Listening on ws://localhost:${PORT}${WS_PATH}`);
 });
+
+////////////////////////////////////////////////////////////////////////////////
+// Dev Process
+////////////////////////////////////////////////////////////////////////////////
+const logBuffer: string[] = [];
+
+const writeLogs = async (logs: string[]) => {
+  try {
+    await fetch(
+      `${process.env.REMOTE_HOSTNAME}/v1/apps/load/appId/_hooks/spa-build-servers/append-logs`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `${process.env.CALLBACK_TOKEN}`,
+        },
+        body: JSON.stringify({ logs }),
+      }
+    );
+  } catch {
+    // ignore
+  }
+}
+
+const spawnDevServer = () => {
+  const child = spawn('npm', ['run', 'dev:vite'], {
+    cwd: process.cwd(),
+  });
+
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+
+  child.stdout.on('data', (chunk: string) => {
+    const lines = chunk.split(/\r?\n/).filter(Boolean);
+    lines.forEach((line) => {
+      logBuffer.push(line);
+    });
+  });
+
+  child.stderr.on('data', (chunk: string) => {
+    const lines = chunk.split(/\r?\n/).filter(Boolean);
+    lines.forEach((line) => {
+      logBuffer.push(line);
+    });
+  });
+
+  child.on('close', (code) => {
+    console.log(`[dev] process exited with code ${code}`);
+  });
+
+  setInterval(async () => {
+    if (logBuffer.length === 0) {
+      return;
+    }
+
+    const toSend = logBuffer.splice(0, logBuffer.length); // drain buffer
+
+    try {
+      await writeLogs(toSend);
+    } catch (err) {
+      //
+    }
+  }, 500);
+
+  return child;
+}
+spawnDevServer();

@@ -10,7 +10,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "package": "npm run build && rm -rf package.zip && rsync -av --include='dist/' --exclude-from='.gitignore' ./ ./dist-temp && cd dist-temp && zip -r ../package.zip . && cd .. && rm -rf dist-temp"
+    "package": "./package.sh"
   },
   "dependencies": {
     "@types/node": "^24.3.0",

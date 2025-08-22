@@ -50,7 +50,7 @@ const syncPackages = async (code: string): Promise<void> => {
 }
 
 const scheduleViteReload = async () => {
-  await fetch(`127.0.0.1:5173/__reload?path=${encodeURIComponent('src/App.tsx')}`);
+  await fetch(`http://127.0.0.1:5173/__reload?path=${encodeURIComponent('src/App.tsx')}`);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -64,7 +64,7 @@ const handlePatch = async (code: string) => {
 
   await syncPackages(code);
 
-  scheduleViteReload();
+  await scheduleViteReload();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

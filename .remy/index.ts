@@ -5,6 +5,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { extractExternalPackages } from './_helpers/extractExternalPackages';
 import { readPackageJsonDeps } from './_helpers/readPackageJsonDeps';
+import { flushLogs, LogItem } from './_helpers/flushLogs';
 
 type IncomingMsg =
   | { event: 'patch'; code: string }
@@ -105,25 +106,7 @@ httpServer.listen(PORT, () => {
 ////////////////////////////////////////////////////////////////////////////////
 // Dev Process
 ////////////////////////////////////////////////////////////////////////////////
-const logBuffer: string[] = [];
-
-const writeLogs = async (logs: string[]) => {
-  try {
-    await fetch(
-      `${process.env.REMOTE_HOSTNAME}/v1/apps/load/appId/_hooks/spa-build-servers/append-logs`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `${process.env.CALLBACK_TOKEN}`,
-        },
-        body: JSON.stringify({ logs }),
-      }
-    );
-  } catch {
-    // ignore
-  }
-}
+const logBuffer: LogItem[] = [];
 
 const spawnDevServer = () => {
   const child = spawn('npm', ['run', 'dev:vite'], {
@@ -134,21 +117,11 @@ const spawnDevServer = () => {
   child.stderr.setEncoding('utf8');
 
   child.stdout.on('data', (chunk: string) => {
-    const lines = chunk.split(/\r?\n/).filter(Boolean);
-    lines.forEach((line) => {
-      logBuffer.push(line);
-    });
+    logBuffer.push({ timestampMs: Date.now(), value: chunk});
   });
 
   child.stderr.on('data', (chunk: string) => {
-    const lines = chunk.split(/\r?\n/).filter(Boolean);
-    lines.forEach((line) => {
-      logBuffer.push(line);
-    });
-  });
-
-  child.on('close', (code) => {
-    console.log(`[dev] process exited with code ${code}`);
+    logBuffer.push({ timestampMs: Date.now(), value: chunk});
   });
 
   setInterval(async () => {
@@ -159,7 +132,7 @@ const spawnDevServer = () => {
     const toSend = logBuffer.splice(0, logBuffer.length); // drain buffer
 
     try {
-      await writeLogs(toSend);
+      await flushLogs(toSend);
     } catch (err) {
       //
     }
@@ -167,4 +140,5 @@ const spawnDevServer = () => {
 
   return child;
 }
+
 spawnDevServer();

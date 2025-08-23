@@ -71,12 +71,22 @@ const handlePatch = async (code: string) => {
 // Server
 ////////////////////////////////////////////////////////////////////////////////
 const httpServer = createServer((req, res) => {
-  // Optional: small health check so hitting the URL in a browser shows something.
+  // Set CORS headers for all responses
+  res.setHeader('Access-Control-Allow-Origin', '*'); // or a specific domain instead of *
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    return res.end();
+  }
+
   if (req.url === '/health') {
-    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('ok');
   } else {
-    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('WebSocket server is running. Connect via ' + WS_PATH);
   }
 });

@@ -1,31 +1,50 @@
-export const extractExternalPackages = (
-  code: string,
-): string[] => {
+export const extractExternalPackages = (code: string): string[] => {
   const packages = new Set<string>();
 
-  // Match ES imports: import ... from 'pkg'
-  const importRegex = /import(?:["'\s]*[\w*{}\n\r\t, ]+from\s*)?["']([^"']+)["']/g;
+  // Matches:
+  //   import 'pkg'
+  //   import x from 'pkg'
+  //   import { a as b } from "pkg"
+  const importRegex =
+    /import\s+(?:(?:[\w*\s{},]+)\s+from\s+)?["']([^"']+)["']/g;
 
-  // Match require: const x = require('pkg')
-  const requireRegex = /require\(["']([^"']+)["']\)/g;
+  // Matches: const x = require('pkg')
+  const requireRegex = /require\(\s*["']([^"']+)["']\s*\)/g;
 
-  // Helper: only keep external packages, not relative or absolute paths
+  // Matches: export * from 'pkg' / export { x } from "pkg"
+  const exportFromRegex =
+    /export\s+(?:\*|\{[^}]*\})\s+from\s+["']([^"']+)["']/g;
+
+  // Matches: const m = await import('pkg')
+  const dynamicImportRegex = /\bimport\(\s*["']([^"']+)["']\s*\)/g;
+
   const isExternal = (name: string) =>
-    !name.startsWith('.') && !name.startsWith('/') && !name.match(/^[A-Za-z]:\\/);
+    !name.startsWith('.') &&
+    !name.startsWith('/') &&
+    !name.startsWith('file:') &&
+    !/^[A-Za-z]:\\/.test(name); // Windows absolute paths
 
-  let match: RegExpExecArray | null;
+  const toBasePackage = (name: string) => {
+    if (!isExternal(name)) return null;
+    const parts = name.split('/');
+    // Keep @scope/name for scoped packages
+    if (name.startsWith('@')) return parts.slice(0, 2).join('/');
+    // Otherwise keep the first segment
+    return parts[0];
+  };
 
-  while ((match = importRegex.exec(code)) !== null) {
-    if (isExternal(match[1])) {
-      packages.add(match[1].split('/')[0].startsWith('@') ? match[1].split('/').slice(0, 2).join('/') : match[1].split('/')[0]);
+  const addMatches = (re: RegExp) => {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(code)) !== null) {
+      const base = toBasePackage(m[1]);
+      if (base) packages.add(base);
     }
-  }
+  };
 
-  while ((match = requireRegex.exec(code)) !== null) {
-    if (isExternal(match[1])) {
-      packages.add(match[1].split('/')[0].startsWith('@') ? match[1].split('/').slice(0, 2).join('/') : match[1].split('/')[0]);
-    }
-  }
+  addMatches(importRegex);
+  addMatches(requireRegex);
+  addMatches(exportFromRegex);
+  addMatches(dynamicImportRegex);
 
   return Array.from(packages);
 };

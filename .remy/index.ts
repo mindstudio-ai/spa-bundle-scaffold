@@ -25,26 +25,23 @@ const syncPackages = async (code: string): Promise<void> => {
   const missingPackages = [...referencedPackages].filter((pkg) => !existingPackages.has(pkg));
 
   if (missingPackages.length > 0) {
+    console.log(`Installing missing packages: ${missingPackages.join(', ').trim()}`);
+
     await new Promise<void>((resolve, reject) => {
       const child = spawn('npm', [
         'install',
         ...missingPackages,
         '--loglevel',
-        'info',
-        '--progress',
-        'true',
-        '--foreground-scripts',
-      ], { stdio: 'inherit' });
+        'notice',
+      ]);
 
       child.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`npm install exited with code ${code}`));
-        }
+        resolve();
       });
-
-      child.on('error', (err) => reject(err));
+      child.on('error', (err) => {
+        console.log(err);
+        resolve();
+      });
     });
   }
 }
@@ -57,12 +54,13 @@ const scheduleViteReload = async () => {
 // Patch code
 ////////////////////////////////////////////////////////////////////////////////
 const handlePatch = async (code: string) => {
+  // Sync any NPM packages
+  await syncPackages(code);
+
   // Write the code updates
   const appFile = path.resolve(process.cwd(), 'src', 'App.tsx');
   await fs.mkdir(path.dirname(appFile), { recursive: true });
   await fs.writeFile(appFile, code, 'utf8');
-
-  await syncPackages(code);
 
   await scheduleViteReload();
 }

@@ -1,7 +1,10 @@
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
-import { promises as fs } from 'fs';
-import path from 'path';
+
+import fs from 'node:fs/promises';
+import fssync from 'node:fs';
+import path from 'node:path';
+
 import { spawn } from 'child_process';
 import { extractExternalPackages } from './_helpers/extractExternalPackages';
 import { readPackageJsonDeps } from './_helpers/readPackageJsonDeps';
@@ -76,13 +79,35 @@ const scheduleViteReload = async () => {
 ////////////////////////////////////////////////////////////////////////////////
 // Patch code
 ////////////////////////////////////////////////////////////////////////////////
+let isFirstWrite = true;
 const handlePatch = async (code: string, forceHmr?: boolean) => {
+  const appFile = path.resolve(process.cwd(), 'src', 'App.tsx');
+  const appFileOriginal = path.resolve(process.cwd(), 'src', 'App.tsx.original');
+
+  // If there is no code (empty string), use the code from App.tsx.original
+  if (!code) {
+    onLog('No code, restoring placeholder', 'remy');
+
+    if (fssync.existsSync(appFileOriginal)) {
+      const original = await fs.readFile(appFileOriginal, 'utf8');
+      await fs.writeFile(appFile, original, 'utf8');
+    }
+
+    await scheduleViteReload();
+    return;
+  }
+
   // Sync any NPM packages
   await syncPackages(code);
 
+  // Duplicate App.tsx to App.tsx.original (only once, before overwriting)
+  if (isFirstWrite) {
+    onLog('Preserving placeholder', 'remy');
+    await fs.copyFile(appFile, appFileOriginal);
+    isFirstWrite = false;
+  }
+
   // Write the code updates
-  const appFile = path.resolve(process.cwd(), 'src', 'App.tsx');
-  await fs.mkdir(path.dirname(appFile), { recursive: true });
   await fs.writeFile(appFile, code, 'utf8');
 
   if (forceHmr) {

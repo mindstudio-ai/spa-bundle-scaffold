@@ -3,6 +3,7 @@ import path from 'path';
 
 const PKG_JSON = path.resolve(process.cwd(), 'package.json');
 
+// Get the current npm packages installed in package.json
 export const readPackageJsonDeps = async (): Promise<Set<string>> => {
   try {
     const raw = await fs.readFile(PKG_JSON, 'utf8');

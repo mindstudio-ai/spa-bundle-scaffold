@@ -1,3 +1,4 @@
+// Get imported NPM packages by analyzing code
 export const extractExternalPackages = (code: string): string[] => {
   const packages = new Set<string>();
 

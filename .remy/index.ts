@@ -7,16 +7,24 @@ import { extractExternalPackages } from './_helpers/extractExternalPackages';
 import { readPackageJsonDeps } from './_helpers/readPackageJsonDeps';
 import { flushLogs, LogItem } from './_helpers/flushLogs';
 
-type IncomingMsg =
+type IncomingMessage =
   | { event: 'patch'; code: string; forceHmr?: boolean; }
   | Record<string, unknown>;
 
 const PORT = 4387;
-const HOST = '0.0.0.0';
 const WS_PATH = '/remy';
 
+const logBuffer: LogItem[] = [];
+const onLog = (value: string, tag?: string) => {
+  const resolvedValue = tag ? `[${tag}] ${value}` : value;
+  console.log(resolvedValue);
+
+  // Include timestamp in case the flush gets out of sync, we can re-sort on client
+  logBuffer.push({ timestampMs: Date.now(), value: resolvedValue });
+};
+
 ////////////////////////////////////////////////////////////////////////////////
-// Simple package sycn
+// Simple package sync
 ////////////////////////////////////////////////////////////////////////////////
 const syncPackages = async (code: string): Promise<void> => {
   const referencedPackages = extractExternalPackages(code);
@@ -25,7 +33,7 @@ const syncPackages = async (code: string): Promise<void> => {
   const missingPackages = [...referencedPackages].filter((pkg) => !existingPackages.has(pkg));
 
   if (missingPackages.length > 0) {
-    console.log(`Installing missing packages: ${missingPackages.join(', ').trim()}`);
+    onLog(`Installing missing packages: ${missingPackages.join(', ').trim()}`, 'remy');
 
     await new Promise<void>((resolve, reject) => {
       const child = spawn('npm', [
@@ -33,20 +41,35 @@ const syncPackages = async (code: string): Promise<void> => {
         ...missingPackages,
         '--loglevel',
         'notice',
-      ]);
+      ], { cwd: process.cwd(), });
+
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+
+      child.stdout.on('data', (chunk: string) => {
+        onLog(`${chunk}`, 'remy');
+      });
+
+      child.stderr.on('data', (chunk: string) => {
+        onLog(`${chunk}`, 'remy');
+      });
 
       child.on('close', (code) => {
+        onLog('Packages synced successfully.', 'remy')
         resolve();
       });
+
       child.on('error', (err) => {
-        console.log(err);
+        onLog(`Package install error: ${err}`, 'remy');
         resolve();
       });
     });
   }
 }
 
+// Trigger a full live-reload when the full file is rewritten
 const scheduleViteReload = async () => {
+  onLog(`Large change detected, scheduling full reload, 'remy'`)
   await fetch(`http://127.0.0.1:5173/__reload?path=${encodeURIComponent('src/App.tsx')}`);
 };
 
@@ -72,7 +95,7 @@ const handlePatch = async (code: string, forceHmr?: boolean) => {
 ////////////////////////////////////////////////////////////////////////////////
 const httpServer = createServer((req, res) => {
   // Set CORS headers for all responses
-  res.setHeader('Access-Control-Allow-Origin', '*'); // or a specific domain instead of *
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
@@ -94,36 +117,34 @@ const httpServer = createServer((req, res) => {
 const wss = new WebSocketServer({ server: httpServer, path: WS_PATH });
 
 wss.on('connection', (ws) => {
-  console.log('[ws-server] Client connected.');
+  onLog('Client connected.', 'remy');
 
   ws.on('message', async (data) => {
     try {
-      const msg = JSON.parse(data.toString()) as IncomingMsg;
-      if (msg && msg.event === 'patch' && typeof msg.code === 'string') {
-        console.log('[ws-server] Patching');
-        await handlePatch(msg.code, msg.forceHmr === true);
+      const message = JSON.parse(data.toString()) as IncomingMessage;
+      if (message && message.event === 'patch' && typeof message.code === 'string') {
+        onLog('Patching', 'remy');
+        await handlePatch(message.code, message.forceHmr === true);
       } else {
-        console.error('[ws-server] Invalid message')
+        onLog('Invalid message', 'remy')
       }
     } catch (err: any) {
-      console.error('[ws-server] Error:', err);
+      onLog(`Error: ${err}`, 'remy');
     }
   });
 
   ws.on('close', () => {
-    console.log('[ws-server] Client disconnected.');
+    onLog('Client disconnected.', 'remy');
   });
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`[ws-server] Listening on ws://localhost:${PORT}${WS_PATH}`);
+  onLog(`Listening on ws://localhost:${PORT}${WS_PATH}`, 'remy');
 });
 
 ////////////////////////////////////////////////////////////////////////////////
-// Dev Process
+// NPM Dev Process
 ////////////////////////////////////////////////////////////////////////////////
-const logBuffer: LogItem[] = [];
-
 const spawnDevServer = () => {
   const child = spawn('npm', ['run', 'dev:vite'], {
     cwd: process.cwd(),
@@ -133,11 +154,11 @@ const spawnDevServer = () => {
   child.stderr.setEncoding('utf8');
 
   child.stdout.on('data', (chunk: string) => {
-    logBuffer.push({ timestampMs: Date.now(), value: chunk});
+    onLog(chunk);
   });
 
   child.stderr.on('data', (chunk: string) => {
-    logBuffer.push({ timestampMs: Date.now(), value: chunk});
+    onLog(chunk);
   });
 
   setInterval(async () => {

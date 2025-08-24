@@ -3,6 +3,8 @@ export interface LogItem {
   timestampMs: number;
 }
 
+// Send logs to server for display back to user, using the short-lived local
+// callback token
 export const flushLogs = async (logs: LogItem[]) => {
   try {
     await fetch(

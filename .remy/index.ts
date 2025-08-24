@@ -8,7 +8,7 @@ import { readPackageJsonDeps } from './_helpers/readPackageJsonDeps';
 import { flushLogs, LogItem } from './_helpers/flushLogs';
 
 type IncomingMsg =
-  | { event: 'patch'; code: string }
+  | { event: 'patch'; code: string; forceHmr?: boolean; }
   | Record<string, unknown>;
 
 const PORT = 4387;
@@ -53,7 +53,7 @@ const scheduleViteReload = async () => {
 ////////////////////////////////////////////////////////////////////////////////
 // Patch code
 ////////////////////////////////////////////////////////////////////////////////
-const handlePatch = async (code: string) => {
+const handlePatch = async (code: string, forceHmr?: boolean) => {
   // Sync any NPM packages
   await syncPackages(code);
 
@@ -62,7 +62,9 @@ const handlePatch = async (code: string) => {
   await fs.mkdir(path.dirname(appFile), { recursive: true });
   await fs.writeFile(appFile, code, 'utf8');
 
-  await scheduleViteReload();
+  if (forceHmr) {
+    await scheduleViteReload();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -99,7 +101,7 @@ wss.on('connection', (ws) => {
       const msg = JSON.parse(data.toString()) as IncomingMsg;
       if (msg && msg.event === 'patch' && typeof msg.code === 'string') {
         console.log('[ws-server] Patching');
-        await handlePatch(msg.code);
+        await handlePatch(msg.code, msg.forceHmr === true);
       } else {
         console.error('[ws-server] Invalid message')
       }

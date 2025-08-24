@@ -74,7 +74,12 @@ const syncPackages = async (code: string): Promise<boolean> => {
 
 // Trigger a full live-reload when the full file is rewritten
 const scheduleViteReload = async (restart: boolean) => {
-  onLog('Large change detected, scheduling full reload', 'remy')
+  if (restart) {
+    onLog('Dependency change detected, scheduling full restart', 'remy');
+  } else {
+    onLog('Large change detected, scheduling full reload', 'remy');
+  }
+
   await fetch(`http://127.0.0.1:5173/__reload?path=${encodeURIComponent('src/App.tsx')}${restart ? '&restart' : ''}}`);
 };
 
@@ -112,7 +117,7 @@ const handlePatch = async (code: string, forceHmr?: boolean) => {
   // Write the code updates
   await fs.writeFile(appFile, code, 'utf8');
 
-  if (forceHmr) {
+  if (forceHmr || didInstallPackages) {
     await scheduleViteReload(didInstallPackages);
   }
 }

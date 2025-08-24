@@ -44,7 +44,6 @@ export default createGlobalStyle`
     border: none;
     -webkit-appearance: none;
     background-color: transparent;
-    text-align: left;
   }
 
   button {

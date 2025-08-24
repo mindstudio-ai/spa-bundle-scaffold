@@ -69,7 +69,7 @@ const syncPackages = async (code: string): Promise<void> => {
 
 // Trigger a full live-reload when the full file is rewritten
 const scheduleViteReload = async () => {
-  onLog(`Large change detected, scheduling full reload, 'remy'`)
+  onLog('Large change detected, scheduling full reload', 'remy')
   await fetch(`http://127.0.0.1:5173/__reload?path=${encodeURIComponent('src/App.tsx')}`);
 };
 

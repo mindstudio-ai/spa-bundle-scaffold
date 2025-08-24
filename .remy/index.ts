@@ -29,51 +29,53 @@ const onLog = (value: string, tag?: string) => {
 ////////////////////////////////////////////////////////////////////////////////
 // Simple package sync
 ////////////////////////////////////////////////////////////////////////////////
-const syncPackages = async (code: string): Promise<void> => {
+const syncPackages = async (code: string): Promise<boolean> => {
   const referencedPackages = extractExternalPackages(code);
 
   const existingPackages = await readPackageJsonDeps();
   const missingPackages = [...referencedPackages].filter((pkg) => !existingPackages.has(pkg));
 
-  if (missingPackages.length > 0) {
-    onLog(`Installing missing packages: ${missingPackages.join(', ').trim()}`, 'remy');
-
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn('npm', [
-        'install',
-        ...missingPackages,
-        '--loglevel',
-        'notice',
-      ], { cwd: process.cwd(), });
-
-      child.stdout.setEncoding('utf8');
-      child.stderr.setEncoding('utf8');
-
-      child.stdout.on('data', (chunk: string) => {
-        onLog(`${chunk}`, 'remy');
-      });
-
-      child.stderr.on('data', (chunk: string) => {
-        onLog(`${chunk}`, 'remy');
-      });
-
-      child.on('close', (code) => {
-        onLog('Packages synced successfully.', 'remy')
-        resolve();
-      });
-
-      child.on('error', (err) => {
-        onLog(`Package install error: ${err}`, 'remy');
-        resolve();
-      });
-    });
+  if (missingPackages.length === 0) {
+    return false;
   }
+
+  onLog(`Installing missing packages: ${missingPackages.join(', ').trim()}`, 'remy');
+
+  return await new Promise<boolean>((resolve, reject) => {
+    const child = spawn('npm', [
+      'install',
+      ...missingPackages,
+      '--loglevel',
+      'notice',
+    ], { cwd: process.cwd(), });
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+
+    child.stdout.on('data', (chunk: string) => {
+      onLog(`${chunk}`, 'remy');
+    });
+
+    child.stderr.on('data', (chunk: string) => {
+      onLog(`${chunk}`, 'remy');
+    });
+
+    child.on('close', (code) => {
+      onLog('Packages synced successfully.', 'remy')
+      resolve(true);
+    });
+
+    child.on('error', (err) => {
+      onLog(`Package install error: ${err}`, 'remy');
+      resolve(false);
+    });
+  });
 }
 
 // Trigger a full live-reload when the full file is rewritten
-const scheduleViteReload = async () => {
+const scheduleViteReload = async (restart: boolean) => {
   onLog('Large change detected, scheduling full reload', 'remy')
-  await fetch(`http://127.0.0.1:5173/__reload?path=${encodeURIComponent('src/App.tsx')}`);
+  await fetch(`http://127.0.0.1:5173/__reload?path=${encodeURIComponent('src/App.tsx')}${restart ? '&restart' : ''}}`);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -93,12 +95,9 @@ const handlePatch = async (code: string, forceHmr?: boolean) => {
       await fs.writeFile(appFile, original, 'utf8');
     }
 
-    await scheduleViteReload();
+    await scheduleViteReload(false);
     return;
   }
-
-  // Sync any NPM packages
-  await syncPackages(code);
 
   // Duplicate App.tsx to App.tsx.original (only once, before overwriting)
   if (isFirstWrite) {
@@ -107,11 +106,14 @@ const handlePatch = async (code: string, forceHmr?: boolean) => {
     isFirstWrite = false;
   }
 
+  // Sync any NPM packages
+  const didInstallPackages = await syncPackages(code);
+
   // Write the code updates
   await fs.writeFile(appFile, code, 'utf8');
 
   if (forceHmr) {
-    await scheduleViteReload();
+    await scheduleViteReload(didInstallPackages);
   }
 }
 

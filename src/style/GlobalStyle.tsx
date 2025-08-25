@@ -16,7 +16,6 @@ export default createGlobalStyle`
     width: 100%;
     margin: 0;
     padding: 0;
-    overflow: hidden;
     line-height: 1;
     -webkit-tap-highlight-color: rgba(0,0,0,0);
     touch-action: manipulation;
@@ -25,9 +24,6 @@ export default createGlobalStyle`
     -webkit-text-size-adjust: none;
     touch-action: pan-y; /*prevent user scaling*/
   }
-
-  body::-webkit-scrollbar { width: 0 !important }
-  body { overflow: -moz-scrollbars-none; -ms-overflow-style: none; }
 
   body, textarea, input, button {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";

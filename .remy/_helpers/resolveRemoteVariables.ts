@@ -1,6 +1,6 @@
 const REMOTE_PREFIX = '@@remote_variable@@';
 
-async function resolveRemoteVariables(input: Record<string, any>): Promise<Record<string, any>> {
+export const resolveRemoteVariables = async (input: Record<string, any>): Promise<Record<string, any>> => {
   const entries = Object.entries(input);
 
   const resolvedPairs = await Promise.all(

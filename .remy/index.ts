@@ -9,6 +9,7 @@ import { spawn } from 'child_process';
 import { extractExternalPackages } from './_helpers/extractExternalPackages';
 import { readPackageJsonDeps } from './_helpers/readPackageJsonDeps';
 import { flushLogs, LogItem } from './_helpers/flushLogs';
+import { resolveRemoteVariables } from './_helpers/resolveRemoteVariables';
 
 type IncomingMessage =
   | { event: 'patch'; code: string; forceHmr?: boolean; }

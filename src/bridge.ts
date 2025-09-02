@@ -1,6 +1,10 @@
+import { useMemo } from 'react';
+import { testData } from './testData';
+
 interface CustomWindow extends Window {
   onPost: (values: { [variableName: string]: any }) => void;
   uploadFile: (file: File) => Promise<string>;
+  vars?: { [variableName: string]: any };
 }
 declare const window: CustomWindow;
 
@@ -20,3 +24,12 @@ export const uploadFile = async (file: File): Promise<string> => {
     return '';
   }
 }
+
+export const useTemplateVariables = (): { [variableName: string]: any } => {
+  return useMemo(() => {
+    if (window.vars && typeof window.vars === 'object') {
+      return window.vars;
+    }
+    return testData;
+  }, []);
+};

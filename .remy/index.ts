@@ -12,6 +12,7 @@ import { flushLogs, LogItem } from './_helpers/flushLogs';
 
 type IncomingMessage =
   | { event: 'patch'; code: string; forceHmr?: boolean; }
+  | { event: 'updateTestData'; testData: Record<string, any>; }
   | Record<string, unknown>;
 
 const PORT = 4387;
@@ -122,6 +123,14 @@ const handlePatch = async (code: string, forceHmr?: boolean) => {
   }
 }
 
+const handleUpdateTestData = async (testData: Record<string, any>) => {
+  const value = JSON.stringify(testData);
+  const fileContent = `export const testData: {[index: string]: any} = ${value};`;
+
+  const testDataFile = path.resolve(process.cwd(), 'src', 'testData.ts');
+  await fs.writeFile(testDataFile, fileContent, 'utf8');
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Server
 ////////////////////////////////////////////////////////////////////////////////
@@ -157,6 +166,8 @@ wss.on('connection', (ws) => {
       if (message && message.event === 'patch' && typeof message.code === 'string') {
         onLog('Patching', 'remy');
         await handlePatch(message.code, message.forceHmr === true);
+      } if (message && message.event === 'updateTestData' && typeof message.testData === 'object') {
+        await handleUpdateTestData(message.testData ?? {});
       } else {
         onLog('Invalid message', 'remy')
       }

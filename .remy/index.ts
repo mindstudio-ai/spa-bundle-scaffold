@@ -173,7 +173,7 @@ wss.on('connection', (ws) => {
       if (message && message.event === 'patch' && typeof message.code === 'string') {
         onLog('Patching', 'remy');
         await handlePatch(message.code, message.forceHmr === true);
-      } if (message && message.event === 'updateTestData' && typeof message.testData === 'object') {
+      } else if (message && message.event === 'updateTestData' && typeof message.testData === 'object') {
         await handleUpdateTestData(message.testData ?? {});
       } else {
         onLog('Invalid message', 'remy')

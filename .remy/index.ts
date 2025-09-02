@@ -124,8 +124,10 @@ const handlePatch = async (code: string, forceHmr?: boolean) => {
 }
 
 const handleUpdateTestData = async (testData: Record<string, any>) => {
-  const value = JSON.stringify(testData);
-  const fileContent = `export const testData: {[index: string]: any} = ${value};`;
+  const resolved = await resolveRemoteVariables(testData);
+
+  const value = JSON.stringify(resolved, null, 2);
+  const fileContent = `export const testData: { [index: string]: any } = ${value};\n`;
 
   const testDataFile = path.resolve(process.cwd(), 'src', 'testData.ts');
   await fs.writeFile(testDataFile, fileContent, 'utf8');

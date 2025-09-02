@@ -129,6 +129,10 @@ const handleUpdateTestData = async (testData: Record<string, any>) => {
 
   const testDataFile = path.resolve(process.cwd(), 'src', 'testData.ts');
   await fs.writeFile(testDataFile, fileContent, 'utf8');
+
+  // Schedule a reload, as test data is often only used as an initial state or
+  // a one-time read value
+  await scheduleViteReload(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

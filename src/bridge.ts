@@ -33,3 +33,19 @@ export const useTemplateVariables = (): { [variableName: string]: any } => {
     return testData;
   }, []);
 };
+
+export const approve = (value: any) => {
+  try {
+    window.onPost({ status: 'approve', value });
+  } catch (err) {
+    alert(`Approved!`);
+  }
+}
+
+export const reject = () => {
+  try {
+    window.onPost({ status: 'reject' });
+  } catch (err) {
+    alert(`Rejected!`);
+  }
+}

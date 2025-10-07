@@ -93,12 +93,22 @@ const handlePatch = async (code: string, forceHmr?: boolean) => {
   const appFile = path.resolve(process.cwd(), 'src', 'App.tsx');
   const appFileOriginal = path.resolve(process.cwd(), 'src', 'App.tsx.original');
 
-  // If there is no code (empty string), use the code from App.tsx.original
+  // If there is no code (empty string), restore the placeholder
   if (!code) {
     onLog('No code, restoring placeholder', 'remy');
 
     if (fssync.existsSync(appFileOriginal)) {
       const original = await fs.readFile(appFileOriginal, 'utf8');
+      const current = fssync.existsSync(appFile)
+        ? await fs.readFile(appFile, 'utf8')
+        : '';
+
+      // Skip if current file already matches
+      if (original === current) {
+        onLog('App.tsx already matches original, skipping write', 'remy');
+        return;
+      }
+
       await fs.writeFile(appFile, original, 'utf8');
     }
 
@@ -116,13 +126,23 @@ const handlePatch = async (code: string, forceHmr?: boolean) => {
   // Sync any NPM packages
   const didInstallPackages = await syncPackages(code);
 
-  // Write the code updates
+  // Check if file content already matches
+  const currentCode = fssync.existsSync(appFile)
+    ? await fs.readFile(appFile, 'utf8')
+    : '';
+
+  if (currentCode === code) {
+    onLog('No changes to App.tsx, skipping write', 'remy');
+    return;
+  }
+
+  // Write code updates
   await fs.writeFile(appFile, code, 'utf8');
 
   if (forceHmr || didInstallPackages) {
     await scheduleViteReload(didInstallPackages);
   }
-}
+};
 
 const handleUpdateTestData = async (testData: Record<string, any>) => {
   const resolved = await resolveRemoteVariables(testData);
@@ -131,12 +151,22 @@ const handleUpdateTestData = async (testData: Record<string, any>) => {
   const fileContent = `export const testData: { [index: string]: any } = ${value};\n`;
 
   const testDataFile = path.resolve(process.cwd(), 'src', 'testData.ts');
+
+  const currentContent = fssync.existsSync(testDataFile)
+    ? await fs.readFile(testDataFile, 'utf8')
+    : '';
+
+  if (currentContent === fileContent) {
+    onLog('No changes to testData.ts, skipping write', 'remy');
+    return;
+  }
+
   await fs.writeFile(testDataFile, fileContent, 'utf8');
 
-  // Schedule a reload, as test data is often only used as an initial state or
-  // a one-time read value
+  // Schedule a reload, as test data is often used as an initial state
   await scheduleViteReload(false);
-}
+};
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Server

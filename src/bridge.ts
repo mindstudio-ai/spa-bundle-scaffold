@@ -49,3 +49,11 @@ export const reject = () => {
     alert(`Rejected!`);
   }
 }
+
+export const next = () => {
+  try {
+    window.onPost({ action: 'transition' });
+  } catch (err) {
+    alert(`Next!`);
+  }
+}

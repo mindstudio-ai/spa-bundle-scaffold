@@ -10,7 +10,14 @@ export const resolveRemoteVariables = async (input: Record<string, any>): Promis
         try {
           const remote = await fetch(url).then(res => res.json());
           if (remote && typeof remote === 'object' && 'value' in remote) {
-            return [key, remote.value] as const;
+            let { value } = remote;
+            try {
+              value = JSON.parse(value);
+            } catch {
+              //
+            }
+
+            return [key, value] as const;
           }
         } catch {
           // swallow errors in dev

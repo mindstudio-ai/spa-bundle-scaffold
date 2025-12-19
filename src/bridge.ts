@@ -50,9 +50,9 @@ export const reject = () => {
   }
 }
 
-export const next = () => {
+export const next = (menuOptionId?: string) => {
   try {
-    window.onPost({ action: 'transition' });
+    window.onPost({ action: 'transition', menuOptionId });
   } catch (err) {
     alert(`Next!`);
   }

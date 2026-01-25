@@ -3,6 +3,7 @@ import { testData } from './testData';
 
 interface CustomWindow extends Window {
   onPost: (values: { [variableName: string]: any }) => void;
+  onUpdate: (values: { [variableName: string]: any }) => void;
   uploadFile: (file: File) => Promise<string>;
   vars?: { [variableName: string]: any };
 }
@@ -23,7 +24,15 @@ export const submit = (values: { [variableName: string]: any }) => {
 // Provided because it semantically makes more sense to the AI models when using
 // in workbench mode. In this mode it does a merge instead of a set.
 export const update = (values: { [variableName: string]: any }) => {
-  submit(values);
+  try {
+    window.onUpdate(values);
+  } catch (err) {
+    if (window.location !== window.parent.location) {
+      window.parent.postMessage({ action: 'bridgeDebug', value: `Update` }, '*');
+    } else {
+      alert('[Debug] Updated');
+    }
+  }
 }
 
 export const uploadFile = async (file: File): Promise<string> => {

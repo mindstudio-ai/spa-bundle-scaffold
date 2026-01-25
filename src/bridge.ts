@@ -16,6 +16,12 @@ export const submit = (values: { [variableName: string]: any }) => {
   }
 }
 
+// Provided because it semantically makes more sense to the AI models when using
+// in workbench mode. In this mode it does a merge instead of a set.
+export const update = (values: { [variableName: string]: any }) => {
+  submit(values);
+}
+
 export const uploadFile = async (file: File): Promise<string> => {
   try {
     return await window.uploadFile(file);

@@ -12,7 +12,11 @@ export const submit = (values: { [variableName: string]: any }) => {
   try {
     window.onPost(values);
   } catch (err) {
-    alert(`Submitted!`);
+    if (window.location !== window.parent.location) {
+      window.parent.postMessage({ action: 'bridgeDebug', value: `Submitted` }, '*');
+    } else {
+      alert('[Debug] Submitted');
+    }
   }
 }
 
@@ -26,7 +30,11 @@ export const uploadFile = async (file: File): Promise<string> => {
   try {
     return await window.uploadFile(file);
   } catch (err) {
-    alert('File upload not available in preview mode');
+    if (window.location !== window.parent.location) {
+      window.parent.postMessage({ action: 'bridgeDebug', value: `File upload is not available in preview mode.` }, '*');
+    } else {
+      alert('[Debug] File upload is not available in preview mode.');
+    }
     return '';
   }
 }
@@ -44,7 +52,11 @@ export const approve = (value: any) => {
   try {
     window.onPost({ status: 'approve', value });
   } catch (err) {
-    alert(`Approved!`);
+    if (window.location !== window.parent.location) {
+      window.parent.postMessage({ action: 'bridgeDebug', value: `Approved` }, '*');
+    } else {
+      alert('[Debug] Approved');
+    }
   }
 }
 
@@ -52,7 +64,11 @@ export const reject = () => {
   try {
     window.onPost({ status: 'reject' });
   } catch (err) {
-    alert(`Rejected!`);
+    if (window.location !== window.parent.location) {
+      window.parent.postMessage({ action: 'bridgeDebug', value: `Rejected` }, '*');
+    } else {
+      alert('[Debug] Rejected');
+    }
   }
 }
 
@@ -60,6 +76,10 @@ export const next = (menuOptionId?: string) => {
   try {
     window.onPost({ action: 'transition', menuOptionId });
   } catch (err) {
-    alert(`Next!`);
+    if (window.location !== window.parent.location) {
+      window.parent.postMessage({ action: 'bridgeDebug', value: `Next` }, '*');
+    } else {
+      alert('[Debug] Next');
+    }
   }
 }

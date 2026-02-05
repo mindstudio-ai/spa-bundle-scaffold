@@ -197,7 +197,10 @@ const wss = new WebSocketServer({ server: httpServer, path: WS_PATH });
 wss.on('connection', (ws) => {
   onLog('Client connected.', 'remy');
 
+  ws.send('hello?')
+
   ws.on('message', async (data) => {
+    ws.send(data);
     onLog(data);
 
     try {

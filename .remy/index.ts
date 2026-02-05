@@ -199,8 +199,13 @@ wss.on('connection', (ws) => {
 
   ws.send('hello?')
 
+  ws.on('error', (err) => {
+    ws.send(err);
+    onLog(err);
+  })
+
   ws.on('message', async (data) => {
-    ws.send(data);
+    ws.send('message!');
     onLog(data);
 
     try {

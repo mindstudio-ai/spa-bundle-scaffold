@@ -198,7 +198,8 @@ wss.on('connection', (ws) => {
   onLog('Client connected.', 'remy');
 
   ws.on('message', async (data) => {
-    console.log(data);
+    onLog(data);
+
     try {
       const message = JSON.parse(data.toString()) as IncomingMessage;
       if (message && message.event === 'patch' && typeof message.code === 'string') {

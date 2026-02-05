@@ -22,7 +22,6 @@ const WS_PATH = '/remy';
 const logBuffer: LogItem[] = [];
 const onLog = (value: string, tag?: string) => {
   const resolvedValue = tag ? `[${tag}] ${value}` : value;
-  console.log(resolvedValue);
 
   // Include timestamp in case the flush gets out of sync, we can re-sort on client
   logBuffer.push({ timestampMs: Date.now(), value: resolvedValue });
@@ -200,14 +199,10 @@ wss.on('connection', (ws) => {
   ws.send('hello?')
 
   ws.on('error', (err) => {
-    ws.send(err);
-    onLog(err);
+    onLog(`Socket error: ${err}`, 'remy');
   })
 
   ws.on('message', async (data) => {
-    ws.send('message!');
-    onLog(data);
-
     try {
       const message = JSON.parse(data.toString()) as IncomingMessage;
       if (message && message.event === 'patch' && typeof message.code === 'string') {

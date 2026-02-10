@@ -48,7 +48,14 @@ const syncPackages = async (code: string): Promise<boolean> => {
       ...missingPackages,
       '--loglevel',
       'notice',
-    ], { cwd: process.cwd(), });
+    ], {
+      cwd: process.cwd(),
+      env: {
+        COLUMNS: '500',
+        LINES: '50',
+        TERM: 'xterm-256color',
+      },
+    });
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -233,6 +240,11 @@ httpServer.listen(PORT, () => {
 const spawnDevServer = () => {
   const child = spawn('npm', ['run', 'dev:vite'], {
     cwd: process.cwd(),
+    env: {
+      COLUMNS: '500',
+      LINES: '50',
+      TERM: 'xterm-256color',
+    }
   });
 
   child.stdout.setEncoding('utf8');

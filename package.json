@@ -6,7 +6,8 @@
   "scripts": {
     "dev:remy": "npx tsx .remy",
     "dev:vite": "vite --host 0.0.0.0",
-    "dev": "run-p dev:*",
+    "dev:local": "npx tsx .remy/local.ts",
+    "dev": "run-p dev:remy dev:vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",

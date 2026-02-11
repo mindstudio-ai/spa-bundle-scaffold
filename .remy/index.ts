@@ -1,5 +1,5 @@
 import { createServer } from 'http';
-import { WebSocketServer } from 'ws';
+import WebSocket, { WebSocketServer } from 'ws';
 
 import fs from 'node:fs/promises';
 import fssync from 'node:fs';
@@ -14,6 +14,7 @@ import { resolveRemoteVariables } from './_helpers/resolveRemoteVariables';
 type IncomingMessage =
   | { event: 'patch'; code: string; forceHmr?: boolean; }
   | { event: 'updateTestData'; testData: Record<string, any>; }
+  | { event: 'sync'; }
   | Record<string, unknown>;
 
 const PORT = 4387;
@@ -198,8 +199,6 @@ const wss = new WebSocketServer({ server: httpServer, path: WS_PATH });
 wss.on('connection', (ws) => {
   onLog('Client connected.', 'remy');
 
-  ws.send('hello?')
-
   ws.on('error', (err) => {
     onLog(`Socket error: ${err}`, 'remy');
   })
@@ -207,9 +206,23 @@ wss.on('connection', (ws) => {
   ws.on('message', async (data) => {
     try {
       const message = JSON.parse(data.toString()) as IncomingMessage;
-      if (message && message.event === 'patch' && typeof message.code === 'string') {
+      if (message && message.event === 'sync') {
+        const appFile = path.resolve(process.cwd(), 'src', 'App.tsx');
+        const code = fssync.existsSync(appFile)
+          ? await fs.readFile(appFile, 'utf8')
+          : '';
+        onLog('Sync requested, sending current App.tsx', 'remy');
+        ws.send(JSON.stringify({ event: 'sync', code }));
+      } else if (message && message.event === 'patch' && typeof message.code === 'string') {
         onLog('Patching', 'remy');
         await handlePatch(message.code, message.forceHmr === true);
+        // Broadcast to all other connected clients so they stay in sync
+        const payload = JSON.stringify({ event: 'patch', code: message.code });
+        for (const client of wss.clients) {
+          if (client !== ws && client.readyState === WebSocket.OPEN) {
+            client.send(payload);
+          }
+        }
       } else if (message && message.event === 'updateTestData' && typeof message.testData === 'object') {
         await handleUpdateTestData(message.testData ?? {});
       } else {

@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import fs from 'node:fs';
+import chokidar from 'chokidar';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -84,25 +84,35 @@ async function main() {
 }
 
 function startWatcher(ws: WebSocket) {
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const watcher = chokidar.watch(APP_FILE, {
+    // Wait for writes to finish before firing — handles editors and tools
+    // (like Claude Code) that do multiple rapid writes to the same file.
+    awaitWriteFinish: {
+      stabilityThreshold: 200,
+      pollInterval: 50,
+    },
+    // Ignore the initial add event since we already have the file content.
+    ignoreInitial: true,
+  });
 
-  fs.watch(APP_FILE, () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(async () => {
-      try {
-        const code = await fsp.readFile(APP_FILE, 'utf8');
-        const h = hash(code);
+  watcher.on('change', async () => {
+    try {
+      const code = await fsp.readFile(APP_FILE, 'utf8');
+      const h = hash(code);
 
-        if (h === lastHash) return; // No actual content change (echo or duplicate save)
-        lastHash = h;
+      if (h === lastHash) return; // No actual content change
+      lastHash = h;
 
-        log('Change detected, syncing to remote...');
-        ws.send(JSON.stringify({ event: 'patch', code, forceHmr: true }));
-        log('Synced.');
-      } catch (err: any) {
-        log(`Error reading file: ${err.message}`);
-      }
-    }, 100);
+      log('Change detected, syncing to remote...');
+      ws.send(JSON.stringify({ event: 'patch', code, forceHmr: true }));
+      log('Synced.');
+    } catch (err: any) {
+      log(`Error reading file: ${err.message}`);
+    }
+  });
+
+  watcher.on('error', (err) => {
+    log(`Watcher error: ${err.message}`);
   });
 }
 

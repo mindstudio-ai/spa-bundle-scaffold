@@ -84,7 +84,11 @@ const scheduleViteReload = async (restart: boolean) => {
     onLog('Large change detected, scheduling full reload', 'remy');
   }
 
-  await fetch(`http://127.0.0.1:5173/__reload?path=${encodeURIComponent('src/App.tsx')}${restart ? '&restart' : ''}}`);
+  try {
+    await fetch(`http://127.0.0.1:5173/__reload?path=${encodeURIComponent('src/App.tsx')}${restart ? '&restart' : ''}`);
+  } catch (err) {
+    onLog(`Vite reload failed (server may not be ready): ${err}`, 'remy');
+  }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -245,6 +249,8 @@ httpServer.listen(PORT, () => {
 ////////////////////////////////////////////////////////////////////////////////
 // NPM Dev Process
 ////////////////////////////////////////////////////////////////////////////////
+let devChild: ReturnType<typeof spawn> | null = null;
+
 const spawnDevServer = () => {
   const child = spawn('npm', ['run', 'dev:vite'], {
     cwd: process.cwd(),
@@ -261,21 +267,37 @@ const spawnDevServer = () => {
     onLog(chunk);
   });
 
-  setInterval(async () => {
-    if (logBuffer.length === 0) {
-      return;
-    }
+  child.on('error', (err) => {
+    onLog(`Vite process error: ${err}`, 'remy');
+  });
 
-    const toSend = logBuffer.splice(0, logBuffer.length); // drain buffer
-
-    try {
-      await flushLogs(toSend);
-    } catch (err) {
-      //
-    }
-  }, 500);
+  child.on('exit', (code, signal) => {
+    onLog(`Vite process exited (code=${code}, signal=${signal}), restarting...`, 'remy');
+    setTimeout(() => {
+      devChild = spawnDevServer();
+    }, 1000);
+  });
 
   return child;
 }
 
-spawnDevServer();
+devChild = spawnDevServer();
+
+// Clean up child process on exit
+process.on('SIGTERM', () => { devChild?.kill(); process.exit(0); });
+process.on('SIGINT', () => { devChild?.kill(); process.exit(0); });
+
+// Flush logs to remote on an interval
+setInterval(async () => {
+  if (logBuffer.length === 0) {
+    return;
+  }
+
+  const toSend = logBuffer.splice(0, logBuffer.length); // drain buffer
+
+  try {
+    await flushLogs(toSend);
+  } catch (err) {
+    //
+  }
+}, 500);

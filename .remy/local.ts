@@ -1,11 +1,13 @@
 import WebSocket from 'ws';
 import chokidar from 'chokidar';
 import fsp from 'node:fs/promises';
+import fssync from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import readline from 'node:readline';
 
 const APP_FILE = path.resolve(process.cwd(), 'src', 'App.tsx');
+const PLACEHOLDER_MARKER = 'Empty Interface';
 
 const hash = (content: string) =>
   crypto.createHash('md5').update(content).digest('hex');
@@ -111,11 +113,25 @@ function connect(url: string, attempt = 0) {
       const msg = JSON.parse(data.toString());
 
       if (msg.event === 'sync' && typeof msg.code === 'string') {
-        log('Received App.tsx from remote.');
-        lastHash = hash(msg.code);
-        await fsp.writeFile(APP_FILE, msg.code, 'utf8');
+        // Check if local file already has real work (not the placeholder)
+        const hasLocalFile = fssync.existsSync(APP_FILE);
+        const localCode = hasLocalFile ? await fsp.readFile(APP_FILE, 'utf8') : '';
+        const localIsPlaceholder = !hasLocalFile || !localCode.trim() || localCode.includes(PLACEHOLDER_MARKER);
+
+        if (localIsPlaceholder) {
+          // Local is empty or placeholder — accept the remote file
+          log('Received App.tsx from remote.');
+          lastHash = hash(msg.code);
+          await fsp.writeFile(APP_FILE, msg.code, 'utf8');
+        } else {
+          // Local has real work — push it to remote instead
+          log('Local App.tsx has existing work, keeping it as source of truth.');
+          lastHash = hash(localCode);
+          ws.send(JSON.stringify({ event: 'patch', code: localCode, forceHmr: true }));
+          log('Pushed local App.tsx to remote.');
+        }
+
         hasSynced = true;
-        log('Wrote src/App.tsx. Starting file watcher...');
         startWatcher(ws);
         log('');
         log('Local dev mode active.');

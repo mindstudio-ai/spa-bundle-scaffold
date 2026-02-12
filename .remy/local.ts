@@ -73,7 +73,7 @@ function startWatcher(ws: WebSocket) {
     }
   });
 
-  watcher.on('error', (err) => {
+  watcher.on('error', (err: any) => {
     log(`Watcher error: ${err.message}`);
   });
 }

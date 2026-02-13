@@ -283,9 +283,17 @@ const spawnDevServer = () => {
 
 devChild = spawnDevServer();
 
-// Clean up child process on exit
-process.on('SIGTERM', () => { devChild?.kill(); process.exit(0); });
-process.on('SIGINT', () => { devChild?.kill(); process.exit(0); });
+// Clean up on exit — close all WS clients with 1001 (Going Away) so they
+// know not to reconnect, then kill the Vite child process.
+const shutdown = () => {
+  for (const client of wss.clients) {
+    client.close(1001, 'Server shutting down');
+  }
+  devChild?.kill();
+  process.exit(0);
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 // Flush logs to remote on an interval
 setInterval(async () => {

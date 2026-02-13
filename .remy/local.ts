@@ -146,7 +146,11 @@ function connect(url: string, attempt = 0) {
     }
   });
 
-  ws.on('close', () => {
+  ws.on('close', (code) => {
+    if (code === 1001) {
+      log('Remote server is shutting down. Exiting.');
+      process.exit(0);
+    }
     const nextAttempt = connected ? 0 : attempt + 1;
     const nextDelay = connected ? INITIAL_RECONNECT_DELAY : delay;
     log(`Disconnected from remote. Reconnecting in ${nextDelay / 1000}s...`);

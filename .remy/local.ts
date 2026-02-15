@@ -18,13 +18,61 @@ let hasSynced = false;
 const MAX_RECONNECT_DELAY = 30_000;
 const INITIAL_RECONNECT_DELAY = 1_000;
 
+// ANSI formatting
+const bold = (s: string) => `\x1b[1m${s}\x1b[22m`;
+const dim = (s: string) => `\x1b[2m${s}\x1b[22m`;
+const cyan = (s: string) => `\x1b[36m${s}\x1b[39m`;
+const green = (s: string) => `\x1b[32m${s}\x1b[39m`;
+
 function log(msg: string) {
-  console.log(`[local-dev] ${msg}`);
+  console.log(`  ${dim(msg)}`);
+}
+
+function getPreviewUrl(wsUrl: string): string {
+  if (process.env.PREVIEW_DOMAIN) {
+    const domain = process.env.PREVIEW_DOMAIN;
+    return domain.startsWith('http') ? domain : `https://${domain}`;
+  }
+  try {
+    const parsed = new URL(wsUrl);
+    return `https://${parsed.hostname}`;
+  } catch {
+    return '';
+  }
+}
+
+function printBanner(wsUrl: string, direction: string) {
+  const previewUrl = getPreviewUrl(wsUrl);
+
+  console.log();
+  console.log(`  ${green('⚡')} ${bold('MindStudio Local Dev')}`);
+  console.log();
+  if (previewUrl) {
+    console.log(`  ${green('➜')}  ${bold('Preview:')}   ${cyan(previewUrl)}`);
+  }
+  console.log(`  ${green('➜')}  ${bold('Editing:')}   src/App.tsx`);
+  console.log(`  ${green('➜')}  ${bold('Synced:')}    ${direction}`);
+  console.log();
+  console.log(`  ${dim('Changes sync to the remote sandbox automatically.')}`);
+  console.log(`  ${dim('Press Ctrl+C to stop.')}`);
+  console.log();
+}
+
+function resolveWsUrl(input: string): string {
+  const trimmed = input.trim();
+
+  // Full URL — convert http(s) to ws(s) if needed, pass ws(s) through as-is
+  if (/^(wss?|https?):\/\//i.test(trimmed)) {
+    return trimmed.replace(/^https:/i, 'wss:').replace(/^http:/i, 'ws:');
+  }
+
+  // Subdomain shorthand — build full URL
+  return `wss://${trimmed}.vercel.run/remy`;
 }
 
 async function getWsUrl(): Promise<string> {
   const arg = process.argv[2];
-  if (arg) return arg;
+  if (arg) return resolveWsUrl(arg);
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -32,9 +80,9 @@ async function getWsUrl(): Promise<string> {
   });
 
   return new Promise((resolve) => {
-    rl.question('Enter remote sandbox WS URL (e.g. ws://localhost:4387/remy): ', (answer) => {
+    rl.question('Enter sandbox subdomain or full URL (e.g. sb-337r61t9jnic): ', (answer) => {
       rl.close();
-      resolve(answer.trim());
+      resolve(resolveWsUrl(answer));
     });
   });
 }
@@ -120,23 +168,19 @@ function connect(url: string, attempt = 0) {
 
         if (localIsPlaceholder) {
           // Local is empty or placeholder — accept the remote file
-          log('Received App.tsx from remote.');
           lastHash = hash(msg.code);
           await fsp.writeFile(APP_FILE, msg.code, 'utf8');
+          hasSynced = true;
+          startWatcher(ws);
+          printBanner(url, 'remote → local');
         } else {
           // Local has real work — push it to remote instead
-          log('Local App.tsx has existing work, keeping it as source of truth.');
           lastHash = hash(localCode);
           ws.send(JSON.stringify({ event: 'patch', code: localCode, forceHmr: true }));
-          log('Pushed local App.tsx to remote.');
+          hasSynced = true;
+          startWatcher(ws);
+          printBanner(url, 'local → remote');
         }
-
-        hasSynced = true;
-        startWatcher(ws);
-        log('');
-        log('Local dev mode active.');
-        log('Edit src/App.tsx in your IDE — changes sync to the remote sandbox automatically.');
-        log('Use the remote sandbox preview URL to see your changes.');
       } else if (msg.event === 'patch' && typeof msg.code === 'string') {
         // Ignore remote patches — local file is source of truth
         log('Ignoring remote patch (local file is source of truth).');

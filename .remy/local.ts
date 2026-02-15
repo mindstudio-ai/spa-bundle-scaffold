@@ -153,7 +153,7 @@ function connect(url: string, attempt = 0) {
     }
     const nextAttempt = connected ? 0 : attempt + 1;
     const nextDelay = connected ? INITIAL_RECONNECT_DELAY : delay;
-    log(`Disconnected from remote. Reconnecting in ${nextDelay / 1000}s...`);
+    log(`Disconnected from remote: ${code}. Reconnecting in ${nextDelay / 1000}s...`);
     setTimeout(() => connect(url, nextAttempt), nextDelay);
   });
 

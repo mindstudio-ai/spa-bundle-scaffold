@@ -29,7 +29,7 @@ Returns a `{ [variableName: string]: any }` object with the current variable val
 Returns a `boolean` indicating whether the host workflow is doing background work. Use this to show loading/progress states while the workflow is processing. Reactively updates when the running state changes.
 
 ### `submit(values)` — User Input interfaces
-Submits form values. Signature: `(values: { [variableName: string]: any }) => void`. Watch useIsRunning to show a loading state - the transition can take a LOT of time depending on the workload.
+Submits form values. Signature: `(values: { [variableName: string]: any }) => void`. Watch useIsRunning to show a loading state - the transition can take a LOT of time depending on the workload. If isRunning is true, don't allow the user to submit anything.
 
 ### `update(partialValues)` — Workbench interfaces
 Shallow-merges values into the form state. Signature: `(partialValues: { [variableName: string]: any }) => void`. Call on every change (including keypresses). No submit button — saves are automatic.

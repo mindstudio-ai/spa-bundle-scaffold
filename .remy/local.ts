@@ -17,6 +17,7 @@ let hasSynced = false;
 
 const MAX_RECONNECT_DELAY = 30_000;
 const INITIAL_RECONNECT_DELAY = 1_000;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 // ANSI formatting
 const bold = (s: string) => `\x1b[1m${s}\x1b[22m`;
@@ -28,21 +29,10 @@ function log(msg: string) {
   console.log(`  ${dim(msg)}`);
 }
 
-function getPreviewUrl(wsUrl: string): string {
-  if (process.env.PREVIEW_DOMAIN) {
-    const domain = process.env.PREVIEW_DOMAIN;
-    return domain.startsWith('http') ? domain : `https://${domain}`;
-  }
-  try {
-    const parsed = new URL(wsUrl);
-    return `https://${parsed.hostname}`;
-  } catch {
-    return '';
-  }
-}
-
-function printBanner(wsUrl: string, direction: string) {
-  const previewUrl = getPreviewUrl(wsUrl);
+function printBanner(previewDomain: string, direction: string) {
+  const previewUrl = previewDomain
+    ? (previewDomain.startsWith('http') ? previewDomain : `https://${previewDomain}`)
+    : '';
 
   console.log();
   console.log(`  ${green('⚡')} ${bold('MindStudio Local Dev')}`);
@@ -161,6 +151,8 @@ function connect(url: string, attempt = 0) {
       const msg = JSON.parse(data.toString());
 
       if (msg.event === 'sync' && typeof msg.code === 'string') {
+        const previewDomain = msg.previewDomain || '';
+
         // Check if local file already has real work (not the placeholder)
         const hasLocalFile = fssync.existsSync(APP_FILE);
         const localCode = hasLocalFile ? await fsp.readFile(APP_FILE, 'utf8') : '';
@@ -172,14 +164,14 @@ function connect(url: string, attempt = 0) {
           await fsp.writeFile(APP_FILE, msg.code, 'utf8');
           hasSynced = true;
           startWatcher(ws);
-          printBanner(url, 'remote → local');
+          printBanner(previewDomain, 'remote → local');
         } else {
           // Local has real work — push it to remote instead
           lastHash = hash(localCode);
           ws.send(JSON.stringify({ event: 'patch', code: localCode, forceHmr: true }));
           hasSynced = true;
           startWatcher(ws);
-          printBanner(url, 'local → remote');
+          printBanner(previewDomain, 'local → remote');
         }
       } else if (msg.event === 'patch' && typeof msg.code === 'string') {
         // Ignore remote patches — local file is source of truth
@@ -192,17 +184,23 @@ function connect(url: string, attempt = 0) {
 
   ws.on('close', (code) => {
     if (code === 1001) {
-      log('Remote server is shutting down. Exiting.');
+      log('Remote sandbox shut down. Exiting.');
       process.exit(0);
     }
+
     const nextAttempt = connected ? 0 : attempt + 1;
     const nextDelay = connected ? INITIAL_RECONNECT_DELAY : delay;
-    log(`Disconnected from remote: ${code}. Reconnecting in ${nextDelay / 1000}s...`);
+
+    if (nextAttempt >= MAX_RECONNECT_ATTEMPTS) {
+      log('Remote sandbox appears to be offline. Exiting.');
+      process.exit(1);
+    }
+
+    log(`Reconnecting in ${nextDelay / 1000}s... (attempt ${nextAttempt}/${MAX_RECONNECT_ATTEMPTS})`);
     setTimeout(() => connect(url, nextAttempt), nextDelay);
   });
 
   ws.on('error', (err) => {
-    log(`WebSocket error: ${err.message}`);
     // close event will fire after this — reconnection happens there
   });
 }

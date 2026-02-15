@@ -215,8 +215,9 @@ wss.on('connection', (ws) => {
         const code = fssync.existsSync(appFile)
           ? await fs.readFile(appFile, 'utf8')
           : '';
+        const previewDomain = process.env.PREVIEW_DOMAIN || '';
         onLog('Sync requested, sending current App.tsx', 'remy');
-        ws.send(JSON.stringify({ event: 'sync', code }));
+        ws.send(JSON.stringify({ event: 'sync', code, previewDomain }));
       } else if (message && message.event === 'patch' && typeof message.code === 'string') {
         onLog('Patching', 'remy');
         await handlePatch(message.code, message.forceHmr === true);
@@ -290,7 +291,9 @@ const shutdown = () => {
     client.close(1001, 'Server shutting down');
   }
   devChild?.kill();
-  process.exit(0);
+
+  // Give close frames time to flush before exiting
+  setTimeout(() => process.exit(0), 500);
 };
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

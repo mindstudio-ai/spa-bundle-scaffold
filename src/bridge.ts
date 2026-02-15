@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { testData } from './testData';
 
 interface CustomWindow extends Window {
@@ -6,6 +6,7 @@ interface CustomWindow extends Window {
   onUpdate: (values: { [variableName: string]: any }) => void;
   uploadFile: (file: File) => Promise<string>;
   vars?: { [variableName: string]: any };
+  isRunning?: boolean;
 }
 declare const window: CustomWindow;
 
@@ -48,13 +49,42 @@ export const uploadFile = async (file: File): Promise<string> => {
   }
 }
 
+const getVars = () =>
+  window.vars && typeof window.vars === 'object' ? window.vars : testData;
+
 export const useTemplateVariables = (): { [variableName: string]: any } => {
-  return useMemo(() => {
-    if (window.vars && typeof window.vars === 'object') {
-      return window.vars;
-    }
-    return testData;
+  const [vars, setVars] = useState(getVars);
+
+  useEffect(() => {
+    let lastJson = JSON.stringify(vars);
+
+    const interval = setInterval(() => {
+      const current = getVars();
+      const json = JSON.stringify(current);
+      if (json !== lastJson) {
+        lastJson = json;
+        setVars(current);
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
   }, []);
+
+  return vars;
+};
+
+export const useIsRunning = (): boolean => {
+  const [isRunning, setIsRunning] = useState(() => !!window.isRunning);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsRunning(!!window.isRunning);
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return isRunning;
 };
 
 export const approve = (value: any) => {

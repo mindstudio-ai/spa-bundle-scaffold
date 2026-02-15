@@ -23,7 +23,10 @@ This syncs `src/App.tsx` bidirectionally with the remote sandbox. Use the remote
 Import what you need from `'./bridge'`. Available exports depend on the interface type:
 
 ### `useTemplateVariables()` — hook (all interface types)
-Returns a `{ [variableName: string]: any }` object with the current variable values. Set once at render time. Access values defensively — any key may be `undefined`.
+Returns a `{ [variableName: string]: any }` object with the current variable values. This hook is **reactive** — it polls `window.vars` and re-renders the component whenever the variables change. Variables can be updated at any time by the host workflow (e.g. as background work completes). Access values defensively — any key may be `undefined`.
+
+### `useIsRunning()` — hook (all interface types)
+Returns a `boolean` indicating whether the host workflow is doing background work. Use this to show loading/progress states while the workflow is processing. Reactively updates when the running state changes.
 
 ### `submit(values)` — User Input interfaces
 Submits form values. Signature: `(values: { [variableName: string]: any }) => void`. Show a loading state after calling — the transition takes time.

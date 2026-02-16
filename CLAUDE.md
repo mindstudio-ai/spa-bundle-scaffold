@@ -68,6 +68,23 @@ The user will tell you (or it will be obvious from context) which type of interf
 - Do not use valid `<form>` tags — store values in state and use `onClick` handlers.
 - Packages can be installed simply by importing them (the dev server auto-installs missing packages).
 
+## Image CDN
+
+All images (uploaded via `uploadFile` or received through template variables) are served from an image CDN that supports dynamic resizing via query parameters:
+
+```
+?fm=auto&w=400&h=300&fit=crop
+```
+
+**Parameters:**
+- `fm` — Format: `auto`, `jpg`, or `png`
+- `w` — Width in pixels
+- `h` — Height in pixels
+- `fit` — Resize mode: `crop` or `cover`
+- `crop=face` — Face-detection cropping (use instead of `fit` when cropping to faces)
+
+Always use these parameters to request appropriately sized images rather than relying on CSS scaling of full-resolution originals. This improves load times and reduces bandwidth.
+
 ## Code Conventions
 
 - Always provide the **complete, fully rewritten** `src/App.tsx` — never partial diffs.

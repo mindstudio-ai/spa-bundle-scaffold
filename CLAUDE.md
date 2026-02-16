@@ -85,6 +85,51 @@ All images (uploaded via `uploadFile` or received through template variables) ar
 
 Always use these parameters to request appropriately sized images rather than relying on CSS scaling of full-resolution originals. This improves load times and reduces bandwidth.
 
+## Video CDN
+
+Videos uploaded via `uploadFile` or received through template variables are served from `videos.mindstudio-cdn.com`. Video URLs follow the pattern:
+
+```
+https://videos.mindstudio-cdn.com/{orgId}/videos/{videoId}.mp4
+```
+
+### Thumbnails
+
+Append `/thumbnail.png` to any video URL to get a thumbnail image:
+
+```
+https://videos.mindstudio-cdn.com/{orgId}/videos/{videoId}.mp4/thumbnail.png?ts=last&w=400
+```
+
+**Parameters:**
+- `ts` — Timestamp to capture: number (seconds) or `last` for the last frame. Defaults to `0`.
+- All image CDN resizing parameters also work on thumbnails (`w`, `h`, `fit`, `fm`, `crop`).
+
+### Metadata
+
+Append `/metadata.json` to any video URL to get metadata:
+
+```
+https://videos.mindstudio-cdn.com/{orgId}/videos/{videoId}.mp4/metadata.json
+```
+
+Returns:
+
+```typescript
+type MediaMetadata = {
+  kind: 'image' | 'video' | 'audio' | 'unknown';
+  mimeType?: string;
+  fileSizeBytes?: number;
+  width?: number;
+  height?: number;
+  orientation: 'portrait' | 'landscape' | 'square' | 'unknown';
+  aspectRatio?: string;
+  durationSec?: number;
+  frameRate?: number;
+  hasAudio?: boolean;
+};
+```
+
 ## Code Conventions
 
 - Always provide the **complete, fully rewritten** `src/App.tsx` — never partial diffs.

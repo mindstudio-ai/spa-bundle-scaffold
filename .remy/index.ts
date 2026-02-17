@@ -124,7 +124,7 @@ const handlePatch = async (code: string, filename: string = '/App.tsx', forceHmr
   // Write code updates (empty string resets to placeholder via main.tsx fallback)
   await fs.writeFile(filePath, code, 'utf8');
 
-  if (forceHmr || didInstallPackages) {
+  if (forceHmr || didInstallPackages || !code) {
     await scheduleViteReload(diskPath, didInstallPackages);
   }
 };

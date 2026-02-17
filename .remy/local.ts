@@ -6,13 +6,15 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import readline from 'node:readline';
 
-const APP_FILE = path.resolve(process.cwd(), 'src', 'App.tsx');
-const PLACEHOLDER_MARKER = 'Empty Interface';
+// Wire filenames are /‐prefixed, relative to src/ on disk
+const EDITABLE_FILES = ['/App.tsx', '/OpenGraphCard.tsx'];
+const toDiskPath = (filename: string) => path.join('src', filename.slice(1));
+const toWireFilename = (diskRelative: string) => '/' + diskRelative.replace(/^src[\/\\]/, '');
 
 const hash = (content: string) =>
   crypto.createHash('md5').update(content).digest('hex');
 
-let lastHash = '';
+const lastHashes = new Map<string, string>();
 let hasSynced = false;
 
 const MAX_RECONNECT_DELAY = 30_000;
@@ -40,7 +42,7 @@ function printBanner(previewDomain: string, direction: string) {
   if (previewUrl) {
     console.log(`  ${green('➜')}  ${bold('Preview:')}   ${cyan(previewUrl)}`);
   }
-  console.log(`  ${green('➜')}  ${bold('Editing:')}   src/App.tsx`);
+  console.log(`  ${green('➜')}  ${bold('Editing:')}   ${EDITABLE_FILES.join(', ')}`);
   console.log(`  ${green('➜')}  ${bold('Synced:')}    ${direction}`);
   console.log();
   console.log(`  ${dim('Changes sync to the remote sandbox automatically.')}`);
@@ -77,6 +79,10 @@ async function getWsUrl(): Promise<string> {
   });
 }
 
+function resolveFilePath(filename: string): string {
+  return path.resolve(process.cwd(), toDiskPath(filename));
+}
+
 let watcher: ReturnType<typeof chokidar.watch> | null = null;
 
 function startWatcher(ws: WebSocket) {
@@ -86,7 +92,9 @@ function startWatcher(ws: WebSocket) {
     watcher = null;
   }
 
-  watcher = chokidar.watch(APP_FILE, {
+  const filePaths = EDITABLE_FILES.map(resolveFilePath);
+
+  watcher = chokidar.watch(filePaths, {
     // Wait for writes to finish before firing — handles editors and tools
     // (like Claude Code) that do multiple rapid writes to the same file.
     awaitWriteFinish: {
@@ -97,16 +105,20 @@ function startWatcher(ws: WebSocket) {
     ignoreInitial: true,
   });
 
-  watcher.on('change', async () => {
+  watcher.on('change', async (changedPath) => {
     try {
-      const code = await fsp.readFile(APP_FILE, 'utf8');
+      const code = await fsp.readFile(changedPath, 'utf8');
       const h = hash(code);
 
-      if (h === lastHash) return; // No actual content change
-      lastHash = h;
+      if (h === lastHashes.get(changedPath)) return; // No actual content change
+      lastHashes.set(changedPath, h);
 
-      log('Change detected, syncing to remote...');
-      ws.send(JSON.stringify({ event: 'patch', code, forceHmr: true }));
+      // Convert absolute path to wire filename
+      const diskRelative = path.relative(process.cwd(), changedPath);
+      const filename = toWireFilename(diskRelative);
+
+      log(`Change detected in ${filename}, syncing to remote...`);
+      ws.send(JSON.stringify({ event: 'patch', code, filename, forceHmr: true }));
       log('Synced.');
     } catch (err: any) {
       log(`Error reading file: ${err.message}`);
@@ -132,16 +144,21 @@ function connect(url: string, attempt = 0) {
       log('Connected. Requesting sync...');
       ws.send(JSON.stringify({ event: 'sync' }));
     } else {
-      // Local file is source of truth after initial sync — push it to remote
+      // Local files are source of truth after initial sync — push them to remote
       try {
-        const code = await fsp.readFile(APP_FILE, 'utf8');
-        lastHash = hash(code);
-        log('Reconnected. Pushing local App.tsx to remote...');
-        ws.send(JSON.stringify({ event: 'patch', code, forceHmr: true }));
+        log('Reconnected. Pushing local files to remote...');
+        for (const filename of EDITABLE_FILES) {
+          const filePath = resolveFilePath(filename);
+          if (fssync.existsSync(filePath)) {
+            const code = await fsp.readFile(filePath, 'utf8');
+            lastHashes.set(filePath, hash(code));
+            ws.send(JSON.stringify({ event: 'patch', code, filename, forceHmr: true }));
+          }
+        }
         log('Synced local → remote.');
         startWatcher(ws);
       } catch (err: any) {
-        log(`Error reading local file on reconnect: ${err.message}`);
+        log(`Error reading local files on reconnect: ${err.message}`);
       }
     }
   });
@@ -150,32 +167,45 @@ function connect(url: string, attempt = 0) {
     try {
       const msg = JSON.parse(data.toString());
 
-      if (msg.event === 'sync' && typeof msg.code === 'string') {
+      if (msg.event === 'sync') {
         const previewDomain = msg.previewDomain || '';
 
-        // Check if local file already has real work (not the placeholder)
-        const hasLocalFile = fssync.existsSync(APP_FILE);
-        const localCode = hasLocalFile ? await fsp.readFile(APP_FILE, 'utf8') : '';
-        const localIsPlaceholder = !hasLocalFile || !localCode.trim() || localCode.includes(PLACEHOLDER_MARKER);
-
-        if (localIsPlaceholder) {
-          // Local is empty or placeholder — accept the remote file
-          lastHash = hash(msg.code);
-          await fsp.writeFile(APP_FILE, msg.code, 'utf8');
-          hasSynced = true;
-          startWatcher(ws);
-          printBanner(previewDomain, 'remote → local');
-        } else {
-          // Local has real work — push it to remote instead
-          lastHash = hash(localCode);
-          ws.send(JSON.stringify({ event: 'patch', code: localCode, forceHmr: true }));
-          hasSynced = true;
-          startWatcher(ws);
-          printBanner(previewDomain, 'local → remote');
+        // Build files map from response (support both new `files` and legacy `code`)
+        const files: Record<string, string> = msg.files || {};
+        if (!msg.files && typeof msg.code === 'string') {
+          files['/App.tsx'] = msg.code;
         }
+
+        let direction = '';
+
+        for (const filename of EDITABLE_FILES) {
+          const filePath = resolveFilePath(filename);
+          const remoteCode = files[filename] || '';
+
+          const hasLocalFile = fssync.existsSync(filePath);
+          const localCode = hasLocalFile ? await fsp.readFile(filePath, 'utf8') : '';
+          const localIsEmpty = !hasLocalFile || !localCode.trim();
+
+          if (localIsEmpty && remoteCode) {
+            // Accept remote file
+            lastHashes.set(filePath, hash(remoteCode));
+            await fsp.writeFile(filePath, remoteCode, 'utf8');
+            if (!direction) direction = 'remote → local';
+          } else if (!localIsEmpty) {
+            // Push local to remote
+            lastHashes.set(filePath, hash(localCode));
+            ws.send(JSON.stringify({ event: 'patch', code: localCode, filename, forceHmr: true }));
+            if (!direction) direction = 'local → remote';
+          }
+        }
+
+        hasSynced = true;
+        startWatcher(ws);
+        printBanner(previewDomain, direction || 'synced');
       } else if (msg.event === 'patch' && typeof msg.code === 'string') {
-        // Ignore remote patches — local file is source of truth
-        log('Ignoring remote patch (local file is source of truth).');
+        // Ignore remote patches — local files are source of truth
+        const filename = msg.filename || '/App.tsx';
+        log(`Ignoring remote patch for ${filename} (local is source of truth).`);
       }
     } catch {
       // Ignore non-JSON messages (e.g. the "hello?" greeting)

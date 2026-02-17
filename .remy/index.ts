@@ -12,13 +12,17 @@ import { flushLogs, LogItem } from './_helpers/flushLogs';
 import { resolveRemoteVariables } from './_helpers/resolveRemoteVariables';
 
 type IncomingMessage =
-  | { event: 'patch'; code: string; forceHmr?: boolean; }
+  | { event: 'patch'; code: string; filename?: string; forceHmr?: boolean; }
   | { event: 'updateTestData'; testData: Record<string, any>; }
   | { event: 'sync'; }
   | Record<string, unknown>;
 
 const PORT = 4387;
 const WS_PATH = '/remy';
+
+// Wire filenames are /‐prefixed, relative to src/ on disk
+const EDITABLE_FILES = ['/App.tsx', '/OpenGraphCard.tsx'];
+const toDiskPath = (filename: string) => path.join('src', filename.slice(1));
 
 const logBuffer: LogItem[] = [];
 const onLog = (value: string, tag?: string) => {
@@ -77,7 +81,7 @@ const syncPackages = async (code: string): Promise<boolean> => {
 }
 
 // Trigger a full live-reload when the full file is rewritten
-const scheduleViteReload = async (restart: boolean) => {
+const scheduleViteReload = async (diskPath: string, restart: boolean) => {
   if (restart) {
     onLog('Dependency change detected, scheduling full restart', 'remy');
   } else {
@@ -85,7 +89,7 @@ const scheduleViteReload = async (restart: boolean) => {
   }
 
   try {
-    await fetch(`http://127.0.0.1:5173/__reload?path=${encodeURIComponent('src/App.tsx')}${restart ? '&restart' : ''}`);
+    await fetch(`http://127.0.0.1:5173/__reload?path=${encodeURIComponent(diskPath)}${restart ? '&restart' : ''}`);
   } catch (err) {
     onLog(`Vite reload failed (server may not be ready): ${err}`, 'remy');
   }
@@ -94,59 +98,34 @@ const scheduleViteReload = async (restart: boolean) => {
 ////////////////////////////////////////////////////////////////////////////////
 // Patch code
 ////////////////////////////////////////////////////////////////////////////////
-let isFirstWrite = true;
-const handlePatch = async (code: string, forceHmr?: boolean) => {
-  const appFile = path.resolve(process.cwd(), 'src', 'App.tsx');
-  const appFileOriginal = path.resolve(process.cwd(), 'src', 'App.tsx.original');
-
-  // If there is no code (empty string), restore the placeholder
-  if (!code) {
-    onLog('No code, restoring placeholder', 'remy');
-
-    if (fssync.existsSync(appFileOriginal)) {
-      const original = await fs.readFile(appFileOriginal, 'utf8');
-      const current = fssync.existsSync(appFile)
-        ? await fs.readFile(appFile, 'utf8')
-        : '';
-
-      // Skip if current file already matches
-      if (original === current) {
-        onLog('App.tsx already matches original, skipping write', 'remy');
-        return;
-      }
-
-      await fs.writeFile(appFile, original, 'utf8');
-    }
-
-    await scheduleViteReload(false);
+const handlePatch = async (code: string, filename: string = '/App.tsx', forceHmr?: boolean) => {
+  // Validate filename against whitelist
+  if (!EDITABLE_FILES.includes(filename)) {
+    onLog(`Invalid filename: ${filename}`, 'remy');
     return;
   }
 
-  // Duplicate App.tsx to App.tsx.original (only once, before overwriting)
-  if (isFirstWrite) {
-    onLog('Preserving placeholder', 'remy');
-    await fs.copyFile(appFile, appFileOriginal);
-    isFirstWrite = false;
-  }
+  const diskPath = toDiskPath(filename);
+  const filePath = path.resolve(process.cwd(), diskPath);
 
-  // Sync any NPM packages
-  const didInstallPackages = await syncPackages(code);
+  // Sync any NPM packages (only if there's actual code)
+  const didInstallPackages = code ? await syncPackages(code) : false;
 
   // Check if file content already matches
-  const currentCode = fssync.existsSync(appFile)
-    ? await fs.readFile(appFile, 'utf8')
+  const currentCode = fssync.existsSync(filePath)
+    ? await fs.readFile(filePath, 'utf8')
     : '';
 
   if (currentCode === code) {
-    onLog('No changes to App.tsx, skipping write', 'remy');
+    onLog(`No changes to ${filename}, skipping write`, 'remy');
     return;
   }
 
-  // Write code updates
-  await fs.writeFile(appFile, code, 'utf8');
+  // Write code updates (empty string resets to placeholder via main.tsx fallback)
+  await fs.writeFile(filePath, code, 'utf8');
 
   if (forceHmr || didInstallPackages) {
-    await scheduleViteReload(didInstallPackages);
+    await scheduleViteReload(diskPath, didInstallPackages);
   }
 };
 
@@ -170,7 +149,7 @@ const handleUpdateTestData = async (testData: Record<string, any>) => {
   await fs.writeFile(testDataFile, fileContent, 'utf8');
 
   // Schedule a reload, as test data is often used as an initial state
-  await scheduleViteReload(false);
+  await scheduleViteReload('src/testData.ts', false);
 };
 
 
@@ -211,18 +190,31 @@ wss.on('connection', (ws) => {
     try {
       const message = JSON.parse(data.toString()) as IncomingMessage;
       if (message && message.event === 'sync') {
-        const appFile = path.resolve(process.cwd(), 'src', 'App.tsx');
-        const code = fssync.existsSync(appFile)
-          ? await fs.readFile(appFile, 'utf8')
-          : '';
+        // Read all editable files
+        const files: Record<string, string> = {};
+        for (const filename of EDITABLE_FILES) {
+          const filePath = path.resolve(process.cwd(), toDiskPath(filename));
+          files[filename] = fssync.existsSync(filePath)
+            ? await fs.readFile(filePath, 'utf8')
+            : '';
+        }
+
         const previewDomain = process.env.PREVIEW_DOMAIN || '';
-        onLog('Sync requested, sending current App.tsx', 'remy');
-        ws.send(JSON.stringify({ event: 'sync', code, previewDomain }));
+        onLog('Sync requested, sending current files', 'remy');
+
+        // Include `code` for backward compatibility (App.tsx content)
+        ws.send(JSON.stringify({
+          event: 'sync',
+          code: files['/App.tsx'] || '',
+          files,
+          previewDomain,
+        }));
       } else if (message && message.event === 'patch' && typeof message.code === 'string') {
-        onLog('Patching', 'remy');
-        await handlePatch(message.code, message.forceHmr === true);
+        const filename = (message as any).filename || '/App.tsx';
+        onLog(`Patching ${filename}`, 'remy');
+        await handlePatch(message.code, filename, message.forceHmr === true);
         // Broadcast to all other connected clients so they stay in sync
-        const payload = JSON.stringify({ event: 'patch', code: message.code });
+        const payload = JSON.stringify({ event: 'patch', code: message.code, filename });
         for (const client of wss.clients) {
           if (client !== ws && client.readyState === WebSocket.OPEN) {
             client.send(payload);

@@ -1,19 +1,23 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App.tsx';
+import * as _App from './App.tsx';
+import * as _OG from './OpenGraphCard.tsx';
+import { default as AppPlaceholder } from './placeholders/App.tsx';
+import { default as OGPlaceholder } from './placeholders/OpenGraphCard.tsx';
 import GlobalStyle from './style/GlobalStyle.tsx';
 import { StyleSheetManager } from 'styled-components';
 
-const isCrawler = () =>
-  typeof navigator !== 'undefined' &&
-  (navigator.userAgent.includes('Prerender') ||
-    navigator.userAgent.includes('prerender'));
+const App = (_App as any).default || AppPlaceholder;
+const OpenGraphCard = (_OG as any).default || OGPlaceholder;
+
+const isScreenshot =
+  new URLSearchParams(window.location.search).get('mode') === 'screenshot';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <StyleSheetManager disableCSSOMInjection={isCrawler()}>
+    <StyleSheetManager>
       <GlobalStyle />
-      <App />
+      {isScreenshot ? <OpenGraphCard /> : <App />}
     </StyleSheetManager>
   </StrictMode>,
 );

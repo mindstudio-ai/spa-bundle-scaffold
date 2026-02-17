@@ -6,7 +6,7 @@ This is a Vite + React + TypeScript project used to build custom interfaces for 
 
 ## The One Rule
 
-**You can only edit `src/App.tsx`.** Everything else (routing, CSS reset, build config, bridge, main.tsx) is pre-configured and must not be modified. Treat this as a single-file project.
+**You can only edit `src/App.tsx` and `src/OpenGraphCard.tsx`.** Everything else (routing, CSS reset, build config, bridge, main.tsx) is pre-configured and must not be modified.
 
 ## Local Dev
 
@@ -16,7 +16,7 @@ To develop locally against a running MindStudio sandbox:
 npm run dev:local -- ws://<sandbox-host>:4387/remy
 ```
 
-This syncs `src/App.tsx` bidirectionally with the remote sandbox. Use the remote sandbox preview URL to see your changes — there is no local preview.
+This syncs editable files (`src/App.tsx` and `src/OpenGraphCard.tsx`) bidirectionally with the remote sandbox. Use the remote sandbox preview URL to see your changes — there is no local preview.
 
 ## Bridge API (`src/bridge.ts`)
 
@@ -52,6 +52,28 @@ The user will tell you (or it will be obvious from context) which type of interf
 - **Workbench** — A compact inspector panel (~400px wide, 100svh tall) for the MindStudio IDE. Use `update` on every change. No submit button. Support light and dark mode via `@media (prefers-color-scheme: dark)`. Include a title and subtitle. Design for power users — think DAW/VFX plugin aesthetics.
 - **Menu** — A selection interface where the user picks an option. Call `next(optionId)` immediately on selection — no submit button unless explicitly requested.
 - **Generate Asset** — A template that renders data from `useTemplateVariables()` into a visual output (HTML page, PNG, PDF, or MP4 video). For HTML output, a `next()` function is available for "Continue" buttons.
+
+## Open Graph Card (`src/OpenGraphCard.tsx`)
+
+When the app is loaded with `?mode=screenshot`, it renders `src/OpenGraphCard.tsx` instead of `src/App.tsx`. This component is screenshotted programmatically and used as the Open Graph sharing image for the app (the preview that appears when the link is shared on social media, iMessage, Slack, etc.).
+
+**How it works:**
+- The screenshot request hits `/?mode=screenshot` with a 1200×630 viewport (standard OG image dimensions).
+- All the same template variables are available via `useTemplateVariables()` — the card has access to the same data as the main app.
+- The renderer waits ~1 second for the component to paint before capturing.
+- The resulting screenshot becomes the app's `og:image`.
+
+**Design guidelines for OG cards:**
+- The component must render at exactly **1200×630px** (use a fixed-size wrapper, not `100svh`).
+- Design for impact at a glance — this is a thumbnail. Bold typography, high contrast, simple layout.
+- Use images from template variables where possible (resize via the Image CDN to fit). A card with a relevant image is far more clickable than text alone.
+- Keep text minimal — a title and maybe one line of context. No paragraphs.
+- No interactive elements, animations, or loading states — this is a static capture.
+- Use `useTemplateVariables()` defensively as always — any value may be `undefined`. Fall back to sensible defaults so the card always looks complete.
+
+**When to create an OG card:** Only for interfaces that produce a shareable output — **Generate Asset** and **Menu** types. User Input, Revise Variable, and Workbench interfaces are forms/tools, not shareable artifacts, so they don't need OG cards. Leave `src/OpenGraphCard.tsx` at its default for those.
+
+For asset/output interfaces: if the user doesn't specifically ask about the OG card, you should still create a reasonable one alongside the main app. Use the app's key data (title, hero image, summary) to build a compelling sharing image. Users can always refine it later, but having a good default out of the box matters — a well-designed sharing card makes a big difference in engagement when the link is posted.
 
 ## Style & Design Guidelines
 
@@ -132,8 +154,9 @@ type MediaMetadata = {
 
 ## Code Conventions
 
-- Always provide the **complete, fully rewritten** `src/App.tsx` — never partial diffs.
+- Always provide the **complete, fully rewritten** file — never partial diffs. This applies to both `src/App.tsx` and `src/OpenGraphCard.tsx`.
 - Use `useTemplateVariables()` values defensively (any property may be `undefined`).
 - Pre-fill form fields from `useTemplateVariables()` when values are defined.
 - For Generate Asset templates: use the most structured version of data available (e.g. prefer arrays over giant strings). Guard against unexpected shapes.
 - Always show loading states after calling `submit`, `next`, `approve`, or while awaiting `uploadFile`.
+- When building a Generate Asset or Menu interface, also create a tailored `src/OpenGraphCard.tsx` that uses the app's key data to produce a compelling sharing image. Skip this for User Input, Revise Variable, and Workbench interfaces.

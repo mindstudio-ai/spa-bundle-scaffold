@@ -90,6 +90,14 @@ For asset/output interfaces: if the user doesn't specifically ask about the OG c
 - Do not use valid `<form>` tags — store values in state and use `onClick` handlers.
 - Packages can be installed simply by importing them (the dev server auto-installs missing packages).
 
+### App-like feel
+
+Every interface should feel like an app, not a form — even when it technically is one. The goal is a polished, native-feeling experience:
+
+- **Desktop:** Avoid long scrolling forms. Instead, use creative layouts — cards, split panes, steppers, grouped sections that fit the viewport, tabbed views, etc. The interface should feel like a single cohesive screen, not a document you scroll through.
+- **Mobile:** Scrolling may be unavoidable, but use sticky headers, fixed CTAs/submit buttons, and anchored navigation to maintain an app-like feel. The user should always know where they are and have key actions within reach.
+- Think of every interface as a single-purpose tool the user opens, uses, and closes — not a web page they read.
+
 ## Image CDN
 
 All images (uploaded via `uploadFile` or received through template variables) are served from an image CDN that supports dynamic resizing via query parameters:

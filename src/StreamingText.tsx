@@ -26,16 +26,17 @@ function tokenize(
   text: string,
   keyRef: React.MutableRefObject<number>,
   stagger: number,
-  animated = true,
+  animated: boolean,
+  baseDelay = 0,
 ): Token[] {
   // Each match is a word with its surrounding whitespace, so stagger
   // is per-word (invisible whitespace doesn't waste a stagger slot).
   const words = text.match(/\s*\S+\s*/g);
-  if (!words) return text ? [{ key: keyRef.current++, text, delay: 0, animated }] : [];
+  if (!words) return text ? [{ key: keyRef.current++, text, delay: baseDelay, animated }] : [];
   return words.map((s, i) => ({
     key: keyRef.current++,
     text: s,
-    delay: animated ? i * stagger : 0,
+    delay: animated ? baseDelay + i * stagger : 0,
     animated,
   }));
 }
@@ -65,6 +66,10 @@ export function StreamingText({
   const prevValue = useRef('');
   const nextKey = useRef(0);
   const mounted = useRef(false);
+  // Global timeline: track when the last batch was added and when its
+  // last token's delay expires, so the next batch picks up in sequence.
+  const lastBatchTime = useRef(0);
+  const lastBatchEndDelay = useRef(0);
 
   useEffect(() => {
     injectStyles();
@@ -73,24 +78,41 @@ export function StreamingText({
   useEffect(() => {
     const text = value ?? '';
     const prev = prevValue.current;
-    if (text === prev) return;
-    prevValue.current = text;
 
+    // First effect run — render whatever's already there without animation
     if (!mounted.current) {
-      // Initial value — render immediately without animation
       mounted.current = true;
+      prevValue.current = text;
       setTokens(text ? tokenize(text, nextKey, 0, false) : []);
       return;
     }
 
+    if (text === prev) return;
+    prevValue.current = text;
+
     if (prev.length > 0 && text.startsWith(prev)) {
       // Content was appended — tokenize and animate only the delta
       const delta = text.slice(prev.length);
-      const newTokens = tokenize(delta, nextKey, stagger);
+
+      // Ensure new tokens don't appear before the previous batch finishes
+      const now = performance.now();
+      const elapsed = now - lastBatchTime.current;
+      const remaining = lastBatchEndDelay.current - elapsed;
+      const baseDelay = Math.max(0, remaining + stagger);
+
+      const newTokens = tokenize(delta, nextKey, stagger, true, baseDelay);
+
+      lastBatchTime.current = now;
+      lastBatchEndDelay.current = baseDelay + Math.max(0, newTokens.length - 1) * stagger;
+
       setTokens(existing => [...existing, ...newTokens]);
     } else {
       // Value was replaced or reset
-      setTokens(text ? tokenize(text, nextKey, stagger) : []);
+      const now = performance.now();
+      const newTokens = text ? tokenize(text, nextKey, stagger, true) : [];
+      lastBatchTime.current = now;
+      lastBatchEndDelay.current = Math.max(0, newTokens.length - 1) * stagger;
+      setTokens(newTokens);
     }
   }, [value, stagger]);
 

@@ -19,21 +19,24 @@ interface Token {
   key: number;
   text: string;
   delay: number;
+  animated: boolean;
 }
 
 function tokenize(
   text: string,
   keyRef: React.MutableRefObject<number>,
   stagger: number,
+  animated = true,
 ): Token[] {
   // Each match is a word with its surrounding whitespace, so stagger
   // is per-word (invisible whitespace doesn't waste a stagger slot).
   const words = text.match(/\s*\S+\s*/g);
-  if (!words) return text ? [{ key: keyRef.current++, text, delay: 0 }] : [];
+  if (!words) return text ? [{ key: keyRef.current++, text, delay: 0, animated }] : [];
   return words.map((s, i) => ({
     key: keyRef.current++,
     text: s,
-    delay: i * stagger,
+    delay: animated ? i * stagger : 0,
+    animated,
   }));
 }
 
@@ -61,6 +64,7 @@ export function StreamingText({
   const [tokens, setTokens] = useState<Token[]>([]);
   const prevValue = useRef('');
   const nextKey = useRef(0);
+  const mounted = useRef(false);
 
   useEffect(() => {
     injectStyles();
@@ -72,13 +76,20 @@ export function StreamingText({
     if (text === prev) return;
     prevValue.current = text;
 
+    if (!mounted.current) {
+      // Initial value — render immediately without animation
+      mounted.current = true;
+      setTokens(text ? tokenize(text, nextKey, 0, false) : []);
+      return;
+    }
+
     if (prev.length > 0 && text.startsWith(prev)) {
       // Content was appended — tokenize and animate only the delta
       const delta = text.slice(prev.length);
       const newTokens = tokenize(delta, nextKey, stagger);
       setTokens(existing => [...existing, ...newTokens]);
     } else {
-      // Value appeared, was replaced, or was reset
+      // Value was replaced or reset
       setTokens(text ? tokenize(text, nextKey, stagger) : []);
     }
   }, [value, stagger]);
@@ -105,7 +116,7 @@ export function StreamingText({
         <span
           key={token.key}
           style={
-            animate
+            animate && token.animated
               ? { ...baseStyle, animationDelay: `${token.delay}ms` }
               : noAnimStyle
           }

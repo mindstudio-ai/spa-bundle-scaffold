@@ -59,14 +59,12 @@ import { StreamingText } from './StreamingText';
 
 const vars = useTemplateVariables();
 <StreamingText value={vars.aiResponse} />
-<StreamingText value={vars.summary} animation="blurIn" duration="0.5s" />
-<StreamingText value={vars.raw} animation={null} />
 ```
 
 **Props:**
-- `value` — the text to render. As this string grows, only the new content animates in.
-- `animation` — `'fadeIn'` (default), `'blurIn'`, or `null` to disable.
-- `duration` — CSS duration string. Default `'0.4s'`.
+- `value` — the text to render. As this string grows, only the new content fades in.
+- `animate` — set to `false` to disable the fade. Default `true`.
+- `duration` — CSS duration string. Default `'0.6s'`.
 - `className` / `style` — applied to the outer `<span>` wrapper.
 
 Renders inline — drop it anywhere text goes. Handles value resets gracefully (re-animates from scratch). Use this whenever displaying a variable that streams in over time.
@@ -129,6 +127,16 @@ Every interface should feel like an app, not a form — even when it technically
 - **Desktop:** Avoid long scrolling forms. Instead, use creative layouts — cards, split panes, steppers, grouped sections that fit the viewport, tabbed views, etc. The interface should feel like a single cohesive screen, not a document you scroll through.
 - **Mobile:** Scrolling may be unavoidable, but use sticky headers, fixed CTAs/submit buttons, and anchored navigation to maintain an app-like feel. The user should always know where they are and have key actions within reach.
 - Think of every interface as a single-purpose tool the user opens, uses, and closes — not a web page they read.
+
+### No layout shift
+
+**Layout shift is never acceptable.** Elements jumping around as content loads or streams in is the fastest way to make an interface feel broken. Prevent it everywhere:
+
+- **Reserve space** for content that hasn't arrived yet. Use fixed or min-height containers, skeleton placeholders, or aspect-ratio boxes so the layout is stable before data lands.
+- **Streaming text** should flow into a container that grows downward without pushing sibling elements sideways or causing reflows above the viewport. Pin headers, sidebars, and CTAs so they stay put while content fills in.
+- **Images** must always have explicit dimensions (via `width`/`height` attributes or aspect-ratio CSS) so the browser reserves space before the image loads. Never let an image pop in and shove content down.
+- **Loading → loaded transitions** should swap content in-place, not change the size or position of the container. A spinner and the final content should occupy the same space.
+- **Conditional UI** (e.g. elements that appear when `useIsRunning()` changes, or sections that show after a variable is populated) should be laid out so their appearance doesn't displace existing content. Use overlay/absolute positioning, reserved slots, or opacity transitions rather than inserting elements into the flow.
 
 ## Image CDN
 

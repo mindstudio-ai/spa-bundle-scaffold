@@ -11,10 +11,6 @@ function injectStyles() {
       from { opacity: 0; }
       to { opacity: 1; }
     }
-    @keyframes st-blurIn {
-      from { opacity: 0; filter: blur(4px); }
-      to { opacity: 1; filter: blur(0); }
-    }
   `;
   document.head.appendChild(el);
 }
@@ -22,33 +18,43 @@ function injectStyles() {
 interface Token {
   key: number;
   text: string;
+  delay: number;
 }
 
 function tokenize(
   text: string,
   keyRef: React.MutableRefObject<number>,
+  stagger: number,
 ): Token[] {
-  return text
-    .split(/(\s+)/)
-    .filter(s => s.length > 0)
-    .map(s => ({ key: keyRef.current++, text: s }));
+  // Each match is a word with its surrounding whitespace, so stagger
+  // is per-word (invisible whitespace doesn't waste a stagger slot).
+  const words = text.match(/\s*\S+\s*/g);
+  if (!words) return text ? [{ key: keyRef.current++, text, delay: 0 }] : [];
+  return words.map((s, i) => ({
+    key: keyRef.current++,
+    text: s,
+    delay: i * stagger,
+  }));
 }
 
 interface StreamingTextProps {
-  /** The text value to render. As this grows, new content animates in. */
+  /** The text value to render. As this grows, new content fades in. */
   value: string | undefined;
-  /** Animation effect. Default: 'fadeIn'. Set to null to disable. */
-  animation?: 'fadeIn' | 'blurIn' | null;
-  /** CSS animation duration. Default: '0.4s'. */
+  /** Set to false to disable the fade-in animation. */
+  animate?: boolean;
+  /** CSS animation duration. Default: '0.6s'. */
   duration?: string;
+  /** Delay in ms between each word within a batch. Default: 30. */
+  stagger?: number;
   className?: string;
   style?: React.CSSProperties;
 }
 
 export function StreamingText({
   value,
-  animation = 'fadeIn',
-  duration = '0.4s',
+  animate = true,
+  duration = '0.6s',
+  stagger = 30,
   className,
   style,
 }: StreamingTextProps) {
@@ -69,34 +75,41 @@ export function StreamingText({
     if (prev.length > 0 && text.startsWith(prev)) {
       // Content was appended — tokenize and animate only the delta
       const delta = text.slice(prev.length);
-      const newTokens = tokenize(delta, nextKey);
+      const newTokens = tokenize(delta, nextKey, stagger);
       setTokens(existing => [...existing, ...newTokens]);
     } else {
       // Value appeared, was replaced, or was reset
-      setTokens(text ? tokenize(text, nextKey) : []);
+      setTokens(text ? tokenize(text, nextKey, stagger) : []);
     }
-  }, [value]);
+  }, [value, stagger]);
 
-  // Shared style object — stable across renders unless props change.
-  // CSS animations only fire on mount, so existing tokens won't replay.
-  const tokenStyle = useMemo<React.CSSProperties>(
-    () =>
-      animation
-        ? {
-            animationName: `st-${animation}`,
-            animationDuration: duration,
-            animationTimingFunction: 'ease-out',
-            animationFillMode: 'both',
-            whiteSpace: 'pre-wrap',
-          }
-        : { whiteSpace: 'pre-wrap' },
-    [animation, duration],
+  const baseStyle = useMemo<React.CSSProperties>(
+    () => ({
+      animationName: 'st-fadeIn',
+      animationDuration: duration,
+      animationTimingFunction: 'ease-in-out',
+      animationFillMode: 'both',
+      whiteSpace: 'pre-wrap',
+    }),
+    [duration],
+  );
+
+  const noAnimStyle = useMemo<React.CSSProperties>(
+    () => ({ whiteSpace: 'pre-wrap' }),
+    [],
   );
 
   return (
     <span className={className} style={style}>
       {tokens.map(token => (
-        <span key={token.key} style={tokenStyle}>
+        <span
+          key={token.key}
+          style={
+            animate
+              ? { ...baseStyle, animationDelay: `${token.delay}ms` }
+              : noAnimStyle
+          }
+        >
           {token.text}
         </span>
       ))}

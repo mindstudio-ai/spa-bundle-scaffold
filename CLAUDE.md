@@ -52,21 +52,24 @@ Uploads a file and returns a CDN URL: `(file: File) => Promise<string>`. Handles
 
 ### `<StreamingText />` (`src/StreamingText.tsx`)
 
-A convenience component for rendering text that streams in progressively (e.g. AI-generated content arriving via `useTemplateVariables()`). Automatically detects appended content and fades in each new chunk as it arrives.
+A convenience component for rendering text that streams in progressively (e.g. AI-generated content arriving via `useTemplateVariables()`). Tokenizes incoming text by word boundaries and uses CSS animations (not JS) so each new token fades in smoothly without flicker.
 
 ```tsx
 import { StreamingText } from './StreamingText';
 
 const vars = useTemplateVariables();
 <StreamingText value={vars.aiResponse} />
+<StreamingText value={vars.summary} animation="blurIn" duration="0.5s" />
+<StreamingText value={vars.raw} animation={null} />
 ```
 
-- Renders as an inline `<span>` — drop it anywhere text goes.
-- Accepts `className` and `style` for custom styling.
-- Handles value resets gracefully (fades in the new content fresh).
-- Consolidates DOM nodes automatically to stay lightweight during long streams.
+**Props:**
+- `value` — the text to render. As this string grows, only the new content animates in.
+- `animation` — `'fadeIn'` (default), `'blurIn'`, or `null` to disable.
+- `duration` — CSS duration string. Default `'0.4s'`.
+- `className` / `style` — applied to the outer `<span>` wrapper.
 
-Use this whenever displaying a variable that streams in over time. For variables that arrive all at once, regular text rendering is fine.
+Renders inline — drop it anywhere text goes. Handles value resets gracefully (re-animates from scratch). Use this whenever displaying a variable that streams in over time.
 
 ## Interface Types
 
@@ -117,9 +120,7 @@ For asset/output interfaces: if the user doesn't specifically ask about the OG c
 
 ### Animation with Framer Motion
 
-`framer-motion` is included as a dependency — use it. Tasteful motion elevates an interface from "functional" to "polished." Import `motion` and `AnimatePresence` from `'framer-motion'` as needed.
-
-Every interface should have at least one layer of motion — even if it's just a smooth fade-in on mount. The goal is to feel native and alive, not static.
+`framer-motion` is included as a dependency — use it. Tasteful motion can elevate an interface from "functional" to "polished." Import `motion` and `AnimatePresence` from `'framer-motion'` as needed.
 
 ### App-like feel
 

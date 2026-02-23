@@ -25,6 +25,11 @@ Import what you need from `'./bridge'`. Available exports depend on the interfac
 ### `useTemplateVariables()` — hook (all interface types)
 Returns a `{ [variableName: string]: any }` object with the current variable values. This hook is **reactive** — it polls `window.vars` and re-renders the component whenever the variables change. Variables can be updated at any time by the host workflow (e.g. as background work completes). Access values defensively — any key may be `undefined`.
 
+**Streaming & progressive updates:** Template variables often update rapidly and incrementally — for example, a variable might stream in token-by-token from an AI model, or multiple variables might arrive at different times as earlier workflow steps complete. Design for this:
+- **Render progressively when possible.** If text is streaming in, show it as it arrives rather than waiting — this feels responsive and gives the user something to read immediately. Use Framer Motion's `layout` animations to keep things smooth as content grows.
+- **Wait when it makes sense.** Some UI (like a chart, a summary card, or a layout that depends on all data being present) looks broken mid-stream. In those cases, gate rendering on the data being complete (e.g. check `useIsRunning()` or whether key fields are populated) and show a clean loading state until then.
+- **Don't thrash.** Avoid triggering expensive re-layouts or re-animations on every poll tick. Use `AnimatePresence` for enter/exit rather than re-animating content that's just growing. Memoize derived computations when the underlying data updates frequently.
+
 ### `useIsRunning()` — hook (all interface types)
 Returns a `boolean` indicating whether the host workflow is doing background work. Use this to show loading/progress states while the workflow is processing. Reactively updates when the running state changes.
 
@@ -42,6 +47,26 @@ Transitions to the next workflow step. For menus: `(optionId: string) => void`. 
 
 ### `uploadFile(file)` — all interface types
 Uploads a file and returns a CDN URL: `(file: File) => Promise<string>`. Handles errors/validation internally. Show a loading state while awaiting.
+
+## Utility Components
+
+### `<StreamingText />` (`src/StreamingText.tsx`)
+
+A convenience component for rendering text that streams in progressively (e.g. AI-generated content arriving via `useTemplateVariables()`). Automatically detects appended content and fades in each new chunk as it arrives.
+
+```tsx
+import { StreamingText } from './StreamingText';
+
+const vars = useTemplateVariables();
+<StreamingText value={vars.aiResponse} />
+```
+
+- Renders as an inline `<span>` — drop it anywhere text goes.
+- Accepts `className` and `style` for custom styling.
+- Handles value resets gracefully (fades in the new content fresh).
+- Consolidates DOM nodes automatically to stay lightweight during long streams.
+
+Use this whenever displaying a variable that streams in over time. For variables that arrive all at once, regular text rendering is fine.
 
 ## Interface Types
 
@@ -83,12 +108,18 @@ For asset/output interfaces: if the user doesn't specifically ask about the OG c
 - Use the full page for backgrounds. Make it responsive across mobile and desktop.
 - Modern sans-serif fonts with strong typography and visual hierarchy.
 - Clean, vibrant colors. No full-screen gradients unless incredibly subtle.
-- No parallax, no cheesy JS effects, no unnecessary animations.
+- No parallax, no cheesy JS effects, no gratuitous animations.
 - No hand-drawn SVGs.
 - Keep it minimal — no tags, footer notes, or unnecessary UI chrome. Let the content shine.
 - Use remote resources (e.g. Google Fonts), never self-hosted font packages like fontsource.
 - Do not use valid `<form>` tags — store values in state and use `onClick` handlers.
 - Packages can be installed simply by importing them (the dev server auto-installs missing packages).
+
+### Animation with Framer Motion
+
+`framer-motion` is included as a dependency — use it. Tasteful motion elevates an interface from "functional" to "polished." Import `motion` and `AnimatePresence` from `'framer-motion'` as needed.
+
+Every interface should have at least one layer of motion — even if it's just a smooth fade-in on mount. The goal is to feel native and alive, not static.
 
 ### App-like feel
 

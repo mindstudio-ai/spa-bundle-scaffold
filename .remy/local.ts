@@ -59,7 +59,7 @@ function resolveWsUrl(input: string): string {
   }
 
   // Subdomain shorthand — build full URL
-  return `wss://${trimmed}.sandbox.mindstudio-cdn.com/remy`;
+  return `wss://${trimmed}.vercel.run/remy`;
 }
 
 async function getWsUrl(): Promise<string> {

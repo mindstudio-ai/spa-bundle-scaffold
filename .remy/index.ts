@@ -179,16 +179,8 @@ const httpServer = createServer((req, res) => {
 
 const wss = new WebSocketServer({ server: httpServer, path: WS_PATH });
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws) => {
   onLog('Client connected.', 'remy');
-
-  ws.send(JSON.stringify({
-    event: 'connected',
-    path: req.url,
-    host: req.headers.host,
-    origin: req.headers.origin,
-    ua: req.headers['user-agent']
-  }));
 
   ws.on('error', (err) => {
     onLog(`Socket error: ${err}`, 'remy');

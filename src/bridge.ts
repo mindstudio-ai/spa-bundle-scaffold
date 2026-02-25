@@ -5,6 +5,7 @@ interface CustomWindow extends Window {
   onPost: (values: { [variableName: string]: any }) => void;
   onUpdate: (values: { [variableName: string]: any }) => void;
   uploadFile: (file: File) => Promise<string>;
+  requestFile: (options: { type?: 'image'|'video' }) => Promise<string>;
   vars?: { [variableName: string]: any };
   isRunning?: boolean;
 }
@@ -44,6 +45,19 @@ export const uploadFile = async (file: File): Promise<string> => {
       window.parent.postMessage({ action: 'bridgeDebug', value: `File upload is not available in preview mode.` }, '*');
     } else {
       alert('[Debug] File upload is not available in preview mode.');
+    }
+    return '';
+  }
+}
+
+export const requestFile = async (options: { type?: 'image'|'video' } = {}): Promise<string> => {
+  try {
+    return await window.requestFile(options);
+  } catch (err) {
+    if (window.location !== window.parent.location) {
+      window.parent.postMessage({ action: 'bridgeDebug', value: `File request is not available in preview mode.` }, '*');
+    } else {
+      alert('[Debug] File request is not available in preview mode.');
     }
     return '';
   }

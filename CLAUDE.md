@@ -48,6 +48,9 @@ Transitions to the next workflow step. For menus: `(optionId: string) => void`. 
 ### `uploadFile(file)` — all interface types
 Uploads a file and returns a CDN URL: `(file: File) => Promise<string>`. Handles errors/validation internally. Show a loading state while awaiting.
 
+### `requestFile(options)` — all interface types
+Prompt the user for a file. User can choose to upload a file or choose a file from their media/assets library on the platform: `(options?: { type?: 'image'|'video'; }) => Promise<string>`. Handles errors/validation internally. Show a loading state while awaiting. Always use requestFile for media (images/videos), unless there is no reason the user would ever want to use a file from their assets library.
+
 ## Utility Components
 
 ### `<StreamingText />` (`src/StreamingText.tsx`)

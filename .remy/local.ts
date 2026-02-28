@@ -140,6 +140,7 @@ function connect(url: string, attempt = 0) {
 
   ws.on('open', async () => {
     connected = true;
+    ws.send(JSON.stringify({ event: 'hello', clientType: 'local' }));
     if (!hasSynced) {
       log('Connected. Requesting sync...');
       ws.send(JSON.stringify({ event: 'sync' }));
@@ -208,7 +209,7 @@ function connect(url: string, attempt = 0) {
         log(`Ignoring remote patch for ${filename} (local is source of truth).`);
       }
     } catch {
-      // Ignore non-JSON messages (e.g. the "hello?" greeting)
+      // Ignore non-JSON messages
     }
   });
 

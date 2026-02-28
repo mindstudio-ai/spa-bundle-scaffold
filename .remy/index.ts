@@ -15,7 +15,17 @@ type IncomingMessage =
   | { event: 'patch'; code: string; filename?: string; forceHmr?: boolean; }
   | { event: 'updateTestData'; testData: Record<string, any>; }
   | { event: 'sync'; }
+  | { event: 'hello'; clientType?: string; }
   | Record<string, unknown>;
+
+type ClientInfo = {
+  id: string;
+  type: string;        // 'local', 'editor', or 'unknown'
+  connectedAt: number;
+};
+
+const clients = new Map<WebSocket, ClientInfo>();
+let nextClientId = 1;
 
 const PORT = 4387;
 const WS_PATH = '/remy';
@@ -179,8 +189,25 @@ const httpServer = createServer((req, res) => {
 
 const wss = new WebSocketServer({ server: httpServer, path: WS_PATH });
 
+const broadcastClients = () => {
+  const clientList = [...clients.values()];
+  const payload = JSON.stringify({ event: 'clients', clients: clientList });
+  for (const client of wss.clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(payload);
+    }
+  }
+};
+
 wss.on('connection', (ws) => {
+  const info: ClientInfo = {
+    id: String(nextClientId++),
+    type: 'unknown',
+    connectedAt: Date.now(),
+  };
+  clients.set(ws, info);
   onLog('Client connected.', 'remy');
+  broadcastClients();
 
   ws.on('error', (err) => {
     onLog(`Socket error: ${err}`, 'remy');
@@ -189,7 +216,14 @@ wss.on('connection', (ws) => {
   ws.on('message', async (data) => {
     try {
       const message = JSON.parse(data.toString()) as IncomingMessage;
-      if (message && message.event === 'sync') {
+      if (message && message.event === 'hello') {
+        const clientInfo = clients.get(ws);
+        if (clientInfo && typeof message.clientType === 'string') {
+          clientInfo.type = message.clientType;
+          onLog(`Client ${clientInfo.id} identified as "${clientInfo.type}"`, 'remy');
+          broadcastClients();
+        }
+      } else if (message && message.event === 'sync') {
         // Read all editable files
         const files: Record<string, string> = {};
         for (const filename of EDITABLE_FILES) {
@@ -231,7 +265,10 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    onLog('Client disconnected.', 'remy');
+    const info = clients.get(ws);
+    clients.delete(ws);
+    onLog(`Client disconnected${info ? ` (${info.type}, id=${info.id})` : ''}.`, 'remy');
+    broadcastClients();
   });
 });
 

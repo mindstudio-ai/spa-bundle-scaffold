@@ -1,107 +1,191 @@
-import WebSocket from 'ws';
 import chokidar from 'chokidar';
 import fsp from 'node:fs/promises';
 import fssync from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import readline from 'node:readline';
+import WebSocket from 'ws';
 
-// Wire filenames are /‐prefixed, relative to src/ on disk
-const EDITABLE_FILES = ['/App.tsx', '/OpenGraphCard.tsx'];
-const toDiskPath = (filename: string) => path.join('src', filename.slice(1));
-const toWireFilename = (diskRelative: string) => '/' + diskRelative.replace(/^src[\/\\]/, '');
-
-const hash = (content: string) =>
-  crypto.createHash('md5').update(content).digest('hex');
-
-const lastHashes = new Map<string, string>();
-let hasSynced = false;
-
-const MAX_RECONNECT_DELAY = 30_000;
-const INITIAL_RECONNECT_DELAY = 1_000;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const API_BASE =
+  process.env.MINDSTUDIO_API_URL || 'https://v1.mindstudio-api.com';
+const WS_BASE =
+  process.env.MINDSTUDIO_WS_URL || 'wss://api-socket.mindstudio.ai';
 
 // ANSI formatting
 const bold = (s: string) => `\x1b[1m${s}\x1b[22m`;
 const dim = (s: string) => `\x1b[2m${s}\x1b[22m`;
-const cyan = (s: string) => `\x1b[36m${s}\x1b[39m`;
 const green = (s: string) => `\x1b[32m${s}\x1b[39m`;
+const red = (s: string) => `\x1b[31m${s}\x1b[39m`;
 
 function log(msg: string) {
   console.log(`  ${dim(msg)}`);
 }
 
-function printBanner(previewDomain: string, direction: string) {
-  const previewUrl = previewDomain
-    ? (previewDomain.startsWith('http') ? previewDomain : `https://${previewDomain}`)
-    : '';
+////////////////////////////////////////////////////////////////////////////////
+// CLI args
+////////////////////////////////////////////////////////////////////////////////
 
-  console.log();
-  console.log(`  ${green('⚡')} ${bold('MindStudio Local Dev')}`);
-  console.log();
-  if (previewUrl) {
-    console.log(`  ${green('➜')}  ${bold('Preview:')}   ${cyan(previewUrl)}`);
+function parseArgs(): {
+  key: string;
+  app: string;
+  workflow: string;
+  step: string;
+} {
+  const args = process.argv.slice(2);
+  const parsed: Record<string, string> = {};
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith('--')) {
+      const raw = arg.slice(2);
+      const eqIdx = raw.indexOf('=');
+      if (eqIdx !== -1) {
+        parsed[raw.slice(0, eqIdx)] = raw.slice(eqIdx + 1);
+      } else {
+        const value = args[i + 1];
+        if (value && !value.startsWith('--')) {
+          parsed[raw] = value;
+          i++;
+        }
+      }
+    }
   }
-  console.log(`  ${green('➜')}  ${bold('Editing:')}   ${EDITABLE_FILES.join(', ')}`);
-  console.log(`  ${green('➜')}  ${bold('Synced:')}    ${direction}`);
-  console.log();
-  console.log(`  ${dim('Changes sync to the remote sandbox automatically.')}`);
-  console.log(`  ${dim('Press Ctrl+C to stop.')}`);
-  console.log();
+
+  const key = parsed.key || process.env.MINDSTUDIO_API_KEY || '';
+  const app = parsed.app || '';
+  const workflow = parsed.workflow || '';
+  const step = parsed.step || '';
+
+  if (!key) {
+    console.error(
+      `\n  ${red('Error:')} API key required. Use --key <key> or set MINDSTUDIO_API_KEY env var.\n`,
+    );
+    process.exit(1);
+  }
+  if (!app || !workflow || !step) {
+    console.error(
+      `\n  ${red('Error:')} Missing required args.\n\n  Usage:\n    npm run dev:local -- --key <api-key> --app <appId> --workflow <workflowId> --step <stepId>\n`,
+    );
+    process.exit(1);
+  }
+
+  return { key, app, workflow, step };
 }
 
-function resolveWsUrl(input: string): string {
-  const trimmed = input.trim();
+////////////////////////////////////////////////////////////////////////////////
+// API
+////////////////////////////////////////////////////////////////////////////////
 
-  // Full URL — convert http(s) to ws(s) if needed, pass ws(s) through as-is
-  if (/^(wss?|https?):\/\//i.test(trimmed)) {
-    return trimmed.replace(/^https:/i, 'wss:').replace(/^http:/i, 'ws:');
-  }
-
-  // Subdomain shorthand — build full URL
-  return `wss://${trimmed}.vercel.run/remy`;
+function getInterfaceUrl(
+  app: string,
+  workflow: string,
+  step: string,
+): string {
+  return `${API_BASE}/v1/local-editor/apps/${app}/workflows/${workflow}/steps/${step}/interface`;
 }
 
-async function getWsUrl(): Promise<string> {
-  const arg = process.argv[2];
-  if (arg) return resolveWsUrl(arg);
+function getWsUrl(): string {
+  return WS_BASE + '/local-editor';
+}
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
+async function fetchRemoteFiles(
+  url: string,
+  key: string,
+): Promise<{ files: Record<string, string> }> {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${key}` },
   });
 
-  return new Promise((resolve) => {
-    rl.question('Enter sandbox subdomain or full URL (e.g. sb-337r61t9jnic): ', (answer) => {
-      rl.close();
-      resolve(resolveWsUrl(answer));
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`GET failed (${res.status}): ${body || res.statusText}`);
+  }
+
+  return res.json();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// WebSocket
+////////////////////////////////////////////////////////////////////////////////
+
+function connectWebSocket(
+  key: string,
+  app: string,
+  workflow: string,
+  step: string,
+): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(getWsUrl(), ['auth', key]);
+    let connected = false;
+
+    ws.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'General/ConnectionEstablished' && !connected) {
+          connected = true;
+          ws.send(
+            JSON.stringify({
+              type: 'LocalEditor/Register',
+              appId: app,
+              workflowId: workflow,
+              stepId: step,
+            }),
+          );
+          resolve(ws);
+        }
+      } catch {
+        // ignore parse errors
+      }
+    });
+
+    ws.on('error', (err) => {
+      if (!connected) reject(err);
+    });
+
+    ws.on('close', () => {
+      if (!connected)
+        reject(new Error('WebSocket closed before connection was established'));
     });
   });
 }
 
-function resolveFilePath(filename: string): string {
-  return path.resolve(process.cwd(), toDiskPath(filename));
+function pushCode(ws: WebSocket, file: string, code: string): void {
+  ws.send(
+    JSON.stringify({
+      type: 'LocalEditor/InterfaceCodeUpdated',
+      file,
+      code,
+    }),
+  );
 }
 
-let watcher: ReturnType<typeof chokidar.watch> | null = null;
+////////////////////////////////////////////////////////////////////////////////
+// File watcher
+////////////////////////////////////////////////////////////////////////////////
 
-function startWatcher(ws: WebSocket) {
-  // Tear down any existing watcher before creating a new one
-  if (watcher) {
-    watcher.close();
-    watcher = null;
-  }
+const hash = (content: string) =>
+  crypto.createHash('md5').update(content).digest('hex');
 
-  const filePaths = EDITABLE_FILES.map(resolveFilePath);
+const lastHashes = new Map<string, string>();
 
-  watcher = chokidar.watch(filePaths, {
+// Map of absolute disk path → remote file key
+const diskToRemoteKey = new Map<string, string>();
+
+function toDiskPath(file: string): string {
+  // Strip leading slash — API may return keys like "/App.tsx"
+  const clean = file.replace(/^\//, '');
+  return path.resolve(process.cwd(), 'src', clean);
+}
+
+function startWatcher(ws: WebSocket, files: string[]) {
+  const filePaths = files.map(toDiskPath);
+
+  const watcher = chokidar.watch(filePaths, {
     // Wait for writes to finish before firing — handles editors and tools
     // (like Claude Code) that do multiple rapid writes to the same file.
     awaitWriteFinish: {
       stabilityThreshold: 200,
       pollInterval: 50,
     },
-    // Ignore the initial add event since we already have the file content.
     ignoreInitial: true,
   });
 
@@ -110,18 +194,17 @@ function startWatcher(ws: WebSocket) {
       const code = await fsp.readFile(changedPath, 'utf8');
       const h = hash(code);
 
-      if (h === lastHashes.get(changedPath)) return; // No actual content change
+      if (h === lastHashes.get(changedPath)) return;
       lastHashes.set(changedPath, h);
 
-      // Convert absolute path to wire filename
-      const diskRelative = path.relative(process.cwd(), changedPath);
-      const filename = toWireFilename(diskRelative);
+      const file = diskToRemoteKey.get(changedPath);
+      if (!file) return;
 
-      log(`Change detected in ${filename}, syncing to remote...`);
-      ws.send(JSON.stringify({ event: 'patch', code, filename, forceHmr: true }));
+      log(`Change detected in ${file}, pushing to remote...`);
+      pushCode(ws, file, code);
       log('Synced.');
     } catch (err: any) {
-      log(`Error reading file: ${err.message}`);
+      log(`Error syncing: ${err.message}`);
     }
   });
 
@@ -130,115 +213,82 @@ function startWatcher(ws: WebSocket) {
   });
 }
 
-function connect(url: string, attempt = 0) {
-  const delay = Math.min(INITIAL_RECONNECT_DELAY * 2 ** attempt, MAX_RECONNECT_DELAY);
+////////////////////////////////////////////////////////////////////////////////
+// Banner
+////////////////////////////////////////////////////////////////////////////////
 
-  log(attempt === 0 ? `Connecting to ${url}...` : `Reconnecting to ${url} (attempt ${attempt + 1})...`);
-
-  const ws = new WebSocket(url);
-  let connected = false;
-
-  ws.on('open', async () => {
-    connected = true;
-    ws.send(JSON.stringify({ event: 'hello', clientType: 'local' }));
-    if (!hasSynced) {
-      log('Connected. Requesting sync...');
-      ws.send(JSON.stringify({ event: 'sync' }));
-    } else {
-      // Local files are source of truth after initial sync — push them to remote
-      try {
-        log('Reconnected. Pushing local files to remote...');
-        for (const filename of EDITABLE_FILES) {
-          const filePath = resolveFilePath(filename);
-          if (fssync.existsSync(filePath)) {
-            const code = await fsp.readFile(filePath, 'utf8');
-            lastHashes.set(filePath, hash(code));
-            ws.send(JSON.stringify({ event: 'patch', code, filename, forceHmr: true }));
-          }
-        }
-        log('Synced local → remote.');
-        startWatcher(ws);
-      } catch (err: any) {
-        log(`Error reading local files on reconnect: ${err.message}`);
-      }
-    }
-  });
-
-  ws.on('message', async (data) => {
-    try {
-      const msg = JSON.parse(data.toString());
-
-      if (msg.event === 'sync') {
-        const previewDomain = msg.previewDomain || '';
-
-        // Build files map from response (support both new `files` and legacy `code`)
-        const files: Record<string, string> = msg.files || {};
-        if (!msg.files && typeof msg.code === 'string') {
-          files['/App.tsx'] = msg.code;
-        }
-
-        let direction = '';
-
-        for (const filename of EDITABLE_FILES) {
-          const filePath = resolveFilePath(filename);
-          const remoteCode = files[filename] || '';
-
-          const hasLocalFile = fssync.existsSync(filePath);
-          const localCode = hasLocalFile ? await fsp.readFile(filePath, 'utf8') : '';
-          const localIsEmpty = !hasLocalFile || !localCode.trim();
-
-          if (localIsEmpty && remoteCode) {
-            // Accept remote file
-            lastHashes.set(filePath, hash(remoteCode));
-            await fsp.writeFile(filePath, remoteCode, 'utf8');
-            if (!direction) direction = 'remote → local';
-          } else if (!localIsEmpty) {
-            // Push local to remote
-            lastHashes.set(filePath, hash(localCode));
-            ws.send(JSON.stringify({ event: 'patch', code: localCode, filename, forceHmr: true }));
-            if (!direction) direction = 'local → remote';
-          }
-        }
-
-        hasSynced = true;
-        startWatcher(ws);
-        printBanner(previewDomain, direction || 'synced');
-      } else if (msg.event === 'patch' && typeof msg.code === 'string') {
-        // Ignore remote patches — local files are source of truth
-        const filename = msg.filename || '/App.tsx';
-        log(`Ignoring remote patch for ${filename} (local is source of truth).`);
-      }
-    } catch {
-      // Ignore non-JSON messages
-    }
-  });
-
-  ws.on('close', (code) => {
-    if (code === 1001) {
-      log('Remote sandbox shut down. Exiting.');
-      process.exit(0);
-    }
-
-    const nextAttempt = connected ? 0 : attempt + 1;
-    const nextDelay = connected ? INITIAL_RECONNECT_DELAY : delay;
-
-    if (nextAttempt >= MAX_RECONNECT_ATTEMPTS) {
-      log('Remote sandbox appears to be offline. Exiting.');
-      process.exit(1);
-    }
-
-    log(`Reconnecting in ${nextDelay / 1000}s... (attempt ${nextAttempt}/${MAX_RECONNECT_ATTEMPTS})`);
-    setTimeout(() => connect(url, nextAttempt), nextDelay);
-  });
-
-  ws.on('error', (err) => {
-    // close event will fire after this — reconnection happens there
-  });
+function printBanner(files: string[], direction: string) {
+  console.log();
+  console.log(`  ${green('⚡')} ${bold('MindStudio Local Dev')}`);
+  console.log();
+  console.log(
+    `  ${green('➜')}  ${bold('Editing:')}   ${files.join(', ')}`,
+  );
+  console.log(
+    `  ${green('➜')}  ${bold('Synced:')}    ${direction}`,
+  );
+  console.log();
+  console.log(`  ${dim('Changes push to MindStudio automatically.')}`);
+  console.log(`  ${dim('Press Ctrl+C to stop.')}`);
+  console.log();
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Main
+////////////////////////////////////////////////////////////////////////////////
 
 async function main() {
-  const url = await getWsUrl();
-  connect(url);
+  const { key, app, workflow, step } = parseArgs();
+  const interfaceUrl = getInterfaceUrl(app, workflow, step);
+
+  log('Fetching remote files...');
+  const { files: remoteFiles } = await fetchRemoteFiles(interfaceUrl, key);
+  const fileKeys = Object.keys(remoteFiles);
+
+  // Build disk path → remote key mapping
+  for (const file of fileKeys) {
+    diskToRemoteKey.set(toDiskPath(file), file);
+  }
+
+  log('Connecting to MindStudio...');
+  const ws = await connectWebSocket(key, app, workflow, step);
+
+  let direction = '';
+
+  for (const file of fileKeys) {
+    const diskPath = toDiskPath(file);
+    const remoteCode = remoteFiles[file] || '';
+
+    const hasLocalFile = fssync.existsSync(diskPath);
+    const localCode = hasLocalFile
+      ? await fsp.readFile(diskPath, 'utf8')
+      : '';
+    const localIsEmpty = !hasLocalFile || !localCode.trim();
+
+    if (localIsEmpty && remoteCode) {
+      // No local code yet — accept remote
+      await fsp.mkdir(path.dirname(diskPath), { recursive: true });
+      await fsp.writeFile(diskPath, remoteCode, 'utf8');
+      lastHashes.set(diskPath, hash(remoteCode));
+      if (!direction) direction = 'remote → local';
+    } else if (!localIsEmpty) {
+      // Local code exists — push to remote
+      lastHashes.set(diskPath, hash(localCode));
+      pushCode(ws, file, localCode);
+      if (!direction) direction = 'local → remote';
+    }
+  }
+
+  ws.on('close', () => {
+    log('Connection closed.');
+    process.exit(0);
+  });
+
+  startWatcher(ws, fileKeys);
+  printBanner(fileKeys, direction || 'synced');
 }
 
-main();
+main().catch((err) => {
+  console.error(`\n  ${red('Error:')} ${err.message}\n`);
+  process.exit(1);
+});

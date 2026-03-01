@@ -127,8 +127,9 @@ For asset/output interfaces: if the user doesn't specifically ask about the OG c
 
 ### App-like feel
 
-Every interface should feel like an app, not a form — even when it technically is one. The goal is a polished, native-feeling experience:
+Every interface should feel like a native app, not a mobile website or a form — even when it technically is one. These interfaces run in a sandboxed iframe with zoom disabled (`user-scalable=no`), so they behave like embedded app views, not web pages. Design accordingly:
 
+- **Touch behavior:** Since pinch-to-zoom is disabled, ensure all text is legible at its rendered size (minimum 16px for body text on mobile). Don't rely on the user being able to zoom in. Tap targets should be at least 44×44px.
 - **Desktop:** Avoid long scrolling forms. Instead, use creative layouts — cards, split panes, steppers, grouped sections that fit the viewport, tabbed views, etc. The interface should feel like a single cohesive screen, not a document you scroll through.
 - **Mobile:** Scrolling may be unavoidable, but use sticky headers, fixed CTAs/submit buttons, and anchored navigation to maintain an app-like feel. The user should always know where they are and have key actions within reach.
 - Think of every interface as a single-purpose tool the user opens, uses, and closes — not a web page they read.

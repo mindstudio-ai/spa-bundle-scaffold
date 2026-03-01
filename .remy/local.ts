@@ -171,7 +171,9 @@ const lastHashes = new Map<string, string>();
 const diskToRemoteKey = new Map<string, string>();
 
 function toDiskPath(file: string): string {
-  return path.resolve(process.cwd(), 'src', file);
+  // Strip leading slash — API may return keys like "/App.tsx"
+  const clean = file.replace(/^\//, '');
+  return path.resolve(process.cwd(), 'src', clean);
 }
 
 function startWatcher(ws: WebSocket, files: string[]) {

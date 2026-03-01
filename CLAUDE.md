@@ -10,13 +10,15 @@ This is a Vite + React + TypeScript project used to build custom interfaces for 
 
 ## Local Dev
 
-To develop locally against a running MindStudio sandbox:
+To develop locally against MindStudio:
 
 ```
-npm run dev:local -- ws://<sandbox-host>:4387/remy
+npm run dev:local -- --key <api-key> --app <appId> --workflow <workflowId> --step <stepId>
 ```
 
-This syncs editable files (`src/App.tsx` and `src/OpenGraphCard.tsx`) bidirectionally with the remote sandbox. Use the remote sandbox preview URL to see your changes — there is no local preview.
+You can also set `MINDSTUDIO_API_KEY` as an environment variable instead of passing `--key`.
+
+This fetches the current interface files from MindStudio, syncs them to disk, and watches for local changes. Edits push to MindStudio automatically via WebSocket.
 
 ## Bridge API (`src/bridge.ts`)
 

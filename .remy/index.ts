@@ -14,18 +14,8 @@ import { resolveRemoteVariables } from './_helpers/resolveRemoteVariables';
 type IncomingMessage =
   | { event: 'patch'; code: string; filename?: string; forceHmr?: boolean; }
   | { event: 'updateTestData'; testData: Record<string, any>; }
-  | { event: 'sync'; }
   | { event: 'hello'; clientType?: string; }
   | Record<string, unknown>;
-
-type ClientInfo = {
-  id: string;
-  type: string;        // 'local', 'editor', or 'unknown'
-  connectedAt: number;
-};
-
-const clients = new Map<WebSocket, ClientInfo>();
-let nextClientId = 1;
 
 const PORT = 4387;
 const WS_PATH = '/remy';
@@ -189,25 +179,8 @@ const httpServer = createServer((req, res) => {
 
 const wss = new WebSocketServer({ server: httpServer, path: WS_PATH });
 
-const broadcastClients = () => {
-  const clientList = [...clients.values()];
-  const payload = JSON.stringify({ event: 'clients', clients: clientList });
-  for (const client of wss.clients) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(payload);
-    }
-  }
-};
-
 wss.on('connection', (ws) => {
-  const info: ClientInfo = {
-    id: String(nextClientId++),
-    type: 'unknown',
-    connectedAt: Date.now(),
-  };
-  clients.set(ws, info);
   onLog('Client connected.', 'remy');
-  broadcastClients();
 
   ws.on('error', (err) => {
     onLog(`Socket error: ${err}`, 'remy');
@@ -216,48 +189,23 @@ wss.on('connection', (ws) => {
   ws.on('message', async (data) => {
     try {
       const message = JSON.parse(data.toString()) as IncomingMessage;
-      if (message && message.event === 'hello') {
-        const clientInfo = clients.get(ws);
-        if (clientInfo && typeof message.clientType === 'string') {
-          clientInfo.type = message.clientType;
-          onLog(`Client ${clientInfo.id} identified as "${clientInfo.type}"`, 'remy');
-          broadcastClients();
-        }
-      } else if (message && message.event === 'sync') {
-        // Read all editable files
-        const files: Record<string, string> = {};
-        for (const filename of EDITABLE_FILES) {
-          const filePath = path.resolve(process.cwd(), toDiskPath(filename));
-          files[filename] = fssync.existsSync(filePath)
-            ? await fs.readFile(filePath, 'utf8')
-            : '';
-        }
 
-        const previewDomain = process.env.PREVIEW_DOMAIN || '';
-        onLog('Sync requested, sending current files', 'remy');
-
-        // Include `code` for backward compatibility (App.tsx content)
+      // Reject old local editor clients
+      if (message && message.event === 'hello' && message.clientType === 'local') {
         ws.send(JSON.stringify({
-          event: 'sync',
-          code: files['/App.tsx'] || '',
-          files,
-          previewDomain,
+          event: 'error',
+          message: 'This version of the local editor is no longer supported. Please redownload your local editor bundle and try again.',
         }));
-      } else if (message && message.event === 'patch' && typeof message.code === 'string') {
+        ws.close(1008, 'Unsupported client version');
+        return;
+      }
+
+      if (message && message.event === 'patch' && typeof message.code === 'string') {
         const filename = (message as any).filename || '/App.tsx';
         onLog(`Patching ${filename}`, 'remy');
         await handlePatch(message.code, filename, message.forceHmr === true);
-        // Broadcast to all other connected clients so they stay in sync
-        const payload = JSON.stringify({ event: 'patch', code: message.code, filename });
-        for (const client of wss.clients) {
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(payload);
-          }
-        }
       } else if (message && message.event === 'updateTestData' && typeof message.testData === 'object') {
         await handleUpdateTestData(message.testData ?? {});
-      } else {
-        onLog('Invalid message', 'remy')
       }
     } catch (err: any) {
       onLog(`Error: ${err}`, 'remy');
@@ -265,10 +213,7 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    const info = clients.get(ws);
-    clients.delete(ws);
-    onLog(`Client disconnected${info ? ` (${info.type}, id=${info.id})` : ''}.`, 'remy');
-    broadcastClients();
+    onLog('Client disconnected.', 'remy');
   });
 });
 

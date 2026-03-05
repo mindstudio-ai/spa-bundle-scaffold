@@ -243,7 +243,12 @@ async function main() {
 
   log('Fetching remote files...');
   const { files: remoteFiles } = await fetchRemoteFiles(interfaceUrl, key);
-  const fileKeys = Object.keys(remoteFiles);
+
+  // Always include the known editable files, even if the remote doesn't return them
+  const EDITABLE_FILES = ['App.tsx', 'OpenGraphCard.tsx'];
+  const fileKeys = [
+    ...new Set([...Object.keys(remoteFiles), ...EDITABLE_FILES]),
+  ];
 
   // Build disk path → remote key mapping
   for (const file of fileKeys) {

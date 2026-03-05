@@ -276,6 +276,11 @@ async function main() {
       lastHashes.set(diskPath, hash(localCode));
       pushCode(ws, file, localCode);
       if (!direction) direction = 'local → remote';
+    } else {
+      // Both empty — create the file so the watcher can pick up future edits
+      await fsp.mkdir(path.dirname(diskPath), { recursive: true });
+      await fsp.writeFile(diskPath, '', 'utf8');
+      lastHashes.set(diskPath, hash(''));
     }
   }
 

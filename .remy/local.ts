@@ -245,7 +245,7 @@ async function main() {
   const { files: remoteFiles } = await fetchRemoteFiles(interfaceUrl, key);
 
   // Always include the known editable files, even if the remote doesn't return them
-  const EDITABLE_FILES = ['App.tsx', 'OpenGraphCard.tsx'];
+  const EDITABLE_FILES = ['/App.tsx', '/OpenGraphCard.tsx'];
   const fileKeys = [
     ...new Set([...Object.keys(remoteFiles), ...EDITABLE_FILES]),
   ];

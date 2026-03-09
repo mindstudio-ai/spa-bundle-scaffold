@@ -237,7 +237,6 @@ const spawnDevServer = () => {
   child.stdout.on('data', (chunk: string) => {
     onLog(chunk);
     if (chunk.includes('ready')) {
-      onLog(`ready ${Date.now()}`);
       console.log('@@remy:ready@@'); // Sentinel for sandbox host
     }
   });

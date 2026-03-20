@@ -75,11 +75,7 @@ function parseArgs(): {
 // API
 ////////////////////////////////////////////////////////////////////////////////
 
-function getInterfaceUrl(
-  app: string,
-  workflow: string,
-  step: string,
-): string {
+function getInterfaceUrl(app: string, workflow: string, step: string): string {
   return `${API_BASE}/v1/local-editor/apps/${app}/workflows/${workflow}/steps/${step}/interface`;
 }
 
@@ -221,12 +217,8 @@ function printBanner(files: string[], direction: string) {
   console.log();
   console.log(`  ${green('⚡')} ${bold('MindStudio Local Dev')}`);
   console.log();
-  console.log(
-    `  ${green('➜')}  ${bold('Editing:')}   ${files.join(', ')}`,
-  );
-  console.log(
-    `  ${green('➜')}  ${bold('Synced:')}    ${direction}`,
-  );
+  console.log(`  ${green('➜')}  ${bold('Editing:')}   ${files.join(', ')}`);
+  console.log(`  ${green('➜')}  ${bold('Synced:')}    ${direction}`);
   console.log();
   console.log(`  ${dim('Changes push to MindStudio automatically.')}`);
   console.log(`  ${dim('Press Ctrl+C to stop.')}`);
@@ -245,7 +237,7 @@ async function main() {
   const { files: remoteFiles } = await fetchRemoteFiles(interfaceUrl, key);
 
   // Always include the known editable files, even if the remote doesn't return them
-  const EDITABLE_FILES = ['/App.tsx', '/OpenGraphCard.tsx'];
+  const EDITABLE_FILES = ['/App.tsx', '/OpenGraphCard.tsx', '/testData.ts'];
   const fileKeys = [
     ...new Set([...Object.keys(remoteFiles), ...EDITABLE_FILES]),
   ];
@@ -265,9 +257,7 @@ async function main() {
     const remoteCode = remoteFiles[file] || '';
 
     const hasLocalFile = fssync.existsSync(diskPath);
-    const localCode = hasLocalFile
-      ? await fsp.readFile(diskPath, 'utf8')
-      : '';
+    const localCode = hasLocalFile ? await fsp.readFile(diskPath, 'utf8') : '';
     const localIsEmpty = !hasLocalFile || !localCode.trim();
 
     if (localIsEmpty && remoteCode) {

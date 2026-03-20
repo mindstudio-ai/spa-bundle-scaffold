@@ -21,7 +21,7 @@ const PORT = 4387;
 const WS_PATH = '/remy';
 
 // Wire filenames are /‐prefixed, relative to src/ on disk
-const EDITABLE_FILES = ['/App.tsx', '/OpenGraphCard.tsx'];
+const EDITABLE_FILES = ['/App.tsx', '/OpenGraphCard.tsx', '/testData.ts'];
 const toDiskPath = (filename: string) => path.join('src', filename.slice(1));
 
 const logBuffer: LogItem[] = [];
